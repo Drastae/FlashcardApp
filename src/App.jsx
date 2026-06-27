@@ -6,10 +6,12 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+const PIXABAY_API_KEY = import.meta.env.VITE_PIXABAY_API_KEY;
+
 const LANGUAGES = [
-  { id: 'en', name: 'Anglais', flag: '🇬🇧', gradient: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)' },
-  { id: 'nl', name: 'Néerlandais', flag: '🇳🇱', gradient: 'linear-gradient(135deg, #c2410c 0%, #f97316 100%)' },
-  { id: 'de', name: 'Allemand', flag: '🇩🇪', gradient: 'linear-gradient(135deg, #111827 0%, #374151 100%)' }
+  { id: 'en', name: 'Anglais', flag: 'EN', locale: 'en-US', gradient: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)' },
+  { id: 'nl', name: 'Néerlandais', flag: 'NL', locale: 'nl-NL', gradient: 'linear-gradient(135deg, #c2410c 0%, #f97316 100%)' },
+  { id: 'de', name: 'Allemand', flag: 'DE', locale: 'de-DE', gradient: 'linear-gradient(135deg, #111827 0%, #374151 100%)' }
 ];
 
 export default function App() {
@@ -17,6 +19,9 @@ export default function App() {
   const [selectedLang, setSelectedLang] = useState(() => {
     return localStorage.getItem('fc_selected_lang') || null;
   });
+
+  // --- ÉTAT DE L'ONGLET ACTIF ---
+  const [activeTab, setActiveTab] = useState('review');
 
   useEffect(() => {
     if (selectedLang) {
@@ -30,20 +35,18 @@ export default function App() {
   const [cards, setCards] = useState([]);
   const [masteredWords, setMasteredWords] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
-  // Charger les données depuis Supabase dès que la langue change
   const fetchScoresAndCards = async () => {
     if (!selectedLang) return;
     setLoading(true);
     
-    // Récupérer les cartes actives
     const { data: fetchedCards, error: err1 } = await supabase
       .from('cards')
       .select('*')
       .eq('lang', selectedLang)
       .order('id', { ascending: false });
 
-    // Récupérer les mots maîtrisés
     const { data: fetchedMastered, error: err2 } = await supabase
       .from('mastered_words')
       .select('*')
@@ -67,11 +70,18 @@ export default function App() {
   const [isCorrect, setIsCorrect] = useState(false);
   const [triggerSuccessAnim, setTriggerSuccessAnim] = useState(false);
 
-  // Formulaires
+  // Formulaires & Médias
   const [wordInput, setWordInput] = useState('');
   const [translationInput, setTranslationInput] = useState('');
   const [typeInput, setTypeInput] = useState('n.');
+  const [contextInput, setContextInput] = useState('');
+  const [imageUrlInput, setImageUrlInput] = useState('');
   const [editingId, setEditingId] = useState(null);
+
+  // Recherche API Médias
+  const [searchQuery, setSearchQuery] = useState('');
+  const [apiImages, setApiImages] = useState([]);
+  const [searchingImages, setSearchingImages] = useState(false);
 
   // État pour la modale de consultation
   const [viewingMasteredItem, setViewingMasteredItem] = useState(null);
@@ -91,6 +101,67 @@ export default function App() {
 
   const activeCard = reviewableCards[currentCardIndex];
   const firstLetterHint = activeCard && activeCard.word ? activeCard.word.trim().charAt(0).toUpperCase() : '';
+
+  // --- SYNTHÈSE VOCALE ---
+  const speakWord = (text, e) => {
+    if (e) e.stopPropagation();
+    if (!window.speechSynthesis || !currentLangConfig) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = currentLangConfig.locale;
+    utterance.rate = 0.9;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // --- RECHERCHE AUTOMATIQUE D'IMAGES (PIXABAY) ---
+  const searchOnlineImages = async (query) => {
+    if (!query.trim() || !PIXABAY_API_KEY) return;
+    setSearchingImages(true);
+    try {
+      const response = await fetch(
+        `https://pixabay.com/api/?key=${PIXABAY_API_KEY}&q=${encodeURIComponent(query)}&image_type=photo&per_page=6`
+      );
+      const data = await response.json();
+      if (data.hits) {
+        setApiImages(data.hits.map(hit => hit.webformatURL));
+      }
+    } catch (error) {
+      console.error("Erreur de recherche d'images:", error);
+    } finally {
+      setSearchingImages(false);
+    }
+  };
+
+  // --- TELEVERSEMENT FICHIER LOCAL (SUPABASE STORAGE) ---
+  const handleLocalFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploading(true);
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${Math.random()}.${fileExt}`;
+    const filePath = `${selectedLang}/${fileName}`;
+
+    try {
+      const { error: uploadError } = await supabase.storage
+        .from('flashcards-images')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('flashcards-images')
+        .getPublicUrl(filePath);
+
+      if (data?.publicUrl) {
+        setImageUrlInput(data.publicUrl);
+      }
+    } catch (error) {
+      console.error("Échec de l'upload de l'image:", error);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   // --- VÉRIFICATION DE LA RÉPONSE ---
   useEffect(() => {
@@ -126,21 +197,17 @@ export default function App() {
     if (level === 'hard') {
       targetDate.setDate(targetDate.getDate() + 1);
       const nextReviewStr = targetDate.toISOString().split('T')[0];
-      
       await supabase.from('cards').update({ next_review: nextReviewStr, easy_streak: 0 }).eq('id', activeCard.id);
       
     } else if (level === 'medium') {
       targetDate.setDate(targetDate.getDate() + 2);
       const nextReviewStr = targetDate.toISOString().split('T')[0];
-      
       await supabase.from('cards').update({ next_review: nextReviewStr, easy_streak: 0 }).eq('id', activeCard.id);
 
     } else if (level === 'easy') {
       const newStreak = (activeCard.easy_streak || 0) + 1;
       if (newStreak >= 3) {
-        // Transfert vers les mots maîtrisés
-        await supabase.from('mastered_words').insert([{ word: activeCard.word, translation: activeCard.translation, type: activeCard.type, lang: selectedLang }]);
-        // Suppression de la carte active
+        await supabase.from('mastered_words').insert([{ word: activeCard.word, translation: activeCard.translation, type: activeCard.type, context: activeCard.context, image_url: activeCard.image_url, lang: selectedLang }]);
         await supabase.from('cards').delete().eq('id', activeCard.id);
       } else {
         targetDate.setDate(targetDate.getDate() + 3);
@@ -170,17 +237,21 @@ export default function App() {
     if (editingId) {
       await supabase
         .from('cards')
-        .update({ word: wordInput, translation: translationInput, type: typeInput })
+        .update({ word: wordInput, translation: translationInput, type: typeInput, context: contextInput, image_url: imageUrlInput })
         .eq('id', editingId);
       setEditingId(null);
     } else {
       await supabase
         .from('cards')
-        .insert([{ word: wordInput, translation: translationInput, type: typeInput, lang: selectedLang }]);
+        .insert([{ word: wordInput, translation: translationInput, type: typeInput, context: contextInput, image_url: imageUrlInput, lang: selectedLang }]);
       setCurrentPage(1);
     }
     setWordInput('');
     setTranslationInput('');
+    setContextInput('');
+    setImageUrlInput('');
+    setSearchQuery('');
+    setApiImages([]);
     setTypeInput('n.');
     await fetchScoresAndCards();
   };
@@ -190,6 +261,8 @@ export default function App() {
     setWordInput(card.word);
     setTranslationInput(card.translation);
     setTypeInput(card.type || 'n.');
+    setContextInput(card.context || '');
+    setImageUrlInput(card.image_url || '');
   };
 
   const handleDelete = async (id) => {
@@ -242,6 +315,7 @@ export default function App() {
                 onClick={() => {
                   setSelectedLang(lang.id);
                   setCurrentCardIndex(0);
+                  setActiveTab('review');
                   resetVerification();
                 }}
                 className="btn w-100 p-4 rounded-4 shadow-sm text-white text-start d-flex align-items-center justify-content-between border-0 transition-transform"
@@ -250,7 +324,7 @@ export default function App() {
                 onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
               >
                 <div className="d-flex align-items-center gap-3">
-                  <span className="display-6">{lang.flag}</span>
+                  <span className="badge bg-white bg-opacity-25 fs-5 px-3 py-2 rounded-3 font-monospace fw-bold">{lang.flag}</span>
                   <span className="fs-4 fw-bold">{lang.name}</span>
                 </div>
                 <i className="bi bi-arrow-right-circle fs-3 opacity-75"></i>
@@ -277,9 +351,27 @@ export default function App() {
       {/* Navigation supérieure */}
       <div className="d-flex justify-content-between align-items-center mb-4 bg-white p-3 rounded-4 shadow-sm">
         <div className="d-flex align-items-center gap-3">
-          <span className="fs-2">{currentLangConfig?.flag}</span>
-          <h1 className="h4 mb-0 fw-bold text-dark">Espace d'apprentissage : {currentLangConfig?.name}</h1>
+          <span className="badge bg-secondary bg-opacity-10 text-secondary fs-6 px-2.5 py-1.5 rounded-2 font-monospace fw-bold">{currentLangConfig?.flag}</span>
+          <h1 className="h4 mb-0 fw-bold text-dark">Espace {currentLangConfig?.name}</h1>
         </div>
+        
+        <div className="btn-group shadow-sm" role="group">
+          <button 
+            type="button" 
+            className={`btn px-4 ${activeTab === 'review' ? 'btn-primary' : 'btn-light'}`}
+            onClick={() => setActiveTab('review')}
+          >
+            <i className="bi bi-play-circle me-2"></i>Mode Révision
+          </button>
+          <button 
+            type="button" 
+            className={`btn px-4 ${activeTab === 'manage' ? 'btn-primary' : 'btn-light'}`}
+            onClick={() => setActiveTab('manage')}
+          >
+            <i className="bi bi-gear-fill me-2"></i>Gestion Vocabulaire
+          </button>
+        </div>
+
         <button onClick={() => setSelectedLang(null)} className="btn btn-outline-secondary rounded-3 d-flex align-items-center gap-2">
           <i className="bi bi-arrow-left"></i> Changer de langue
         </button>
@@ -292,237 +384,330 @@ export default function App() {
         </div>
       )}
 
-      <div className="row g-4">
-        
-        {/* COLONNE GAUCHE & CENTRE */}
-        <div className="col-12 col-lg-8">
-          
-          {/* Flashcard active */}
-          <div className="card shadow-sm border-0 rounded-4 mb-4">
-            <div className="card-body p-4">
-              <h2 className="h5 card-title mb-4 text-secondary d-flex align-items-center justify-content-between">
-                <span><i className="bi bi-book text-primary me-2"></i>Révision active</span>
-                <span className="badge bg-secondary rounded-pill fs-6 fw-normal">À réviser : {reviewableCards.length}</span>
-              </h2>
+      {/* VUE 1 : MODE RÉVISION ACTIVE */}
+      {activeTab === 'review' && (
+        <div className="row g-4">
+          <div className="col-12 col-lg-8">
+            <div className="card shadow-sm border-0 rounded-4 mb-4">
+              <div className="card-body p-4">
+                <h2 className="h5 card-title mb-4 text-secondary d-flex align-items-center justify-content-between">
+                  <span><i className="bi bi-book text-primary me-2"></i>Révision active</span>
+                  <span className="badge bg-secondary rounded-pill fs-6 fw-normal">À réviser : {reviewableCards.length}</span>
+                </h2>
 
-              {reviewableCards.length > 0 ? (
-                <div>
-                  <div 
-                    onClick={() => isCorrect && setIsFlipped(!isFlipped)}
-                    className={`p-5 rounded-4 text-center text-white mb-4 d-flex flex-column justify-content-between align-items-center shadow-sm ${triggerSuccessAnim ? 'anim-success' : ''}`}
-                    style={{ 
-                      background: isCorrect 
-                        ? 'linear-gradient(135deg, #198754 0%, #157347 100%)' 
-                        : currentLangConfig?.gradient,
-                      minHeight: '260px',
-                      cursor: isCorrect ? 'pointer' : 'default',
-                      transition: 'background 0.4s ease'
-                    }}
-                  >
-                    <div className="d-flex align-items-center gap-2">
-                      <span className="text-uppercase tracking-wider small opacity-75 fw-bold">
-                        {isFlipped ? `Mot ${currentLangConfig?.name}` : 'Mot Français'}
-                      </span>
-                      <span className="badge bg-white bg-opacity-25 text-white rounded-pill font-monospace">
-                        {activeCard.type || 'n.'}
-                      </span>
-                      {activeCard.easy_streak > 0 && (
-                        <span className="badge bg-warning text-dark rounded-pill small">
-                          <i className="bi bi-star-fill me-1"></i>Série : {activeCard.easy_streak}/3
+                {reviewableCards.length > 0 ? (
+                  <div>
+                    <div 
+                      onClick={() => isCorrect && setIsFlipped(!isFlipped)}
+                      className={`p-4 rounded-4 text-center text-white mb-4 d-flex flex-column justify-content-between align-items-center shadow-sm ${triggerSuccessAnim ? 'anim-success' : ''}`}
+                      style={{ 
+                        background: isCorrect 
+                          ? 'linear-gradient(135deg, #198754 0%, #157347 100%)' 
+                          : currentLangConfig?.gradient,
+                        minHeight: '340px',
+                        cursor: isCorrect ? 'pointer' : 'default',
+                        transition: 'background 0.4s ease'
+                      }}
+                    >
+                      <div className="d-flex align-items-center gap-2">
+                        <span className="text-uppercase tracking-wider small opacity-75 fw-bold">
+                          {isFlipped ? `Mot ${currentLangConfig?.name} & Contexte` : 'Mot Français'}
+                        </span>
+                        <span className="badge bg-white bg-opacity-25 text-white rounded-pill font-monospace">
+                          {activeCard.type || 'n.'}
+                        </span>
+                        {activeCard.easy_streak > 0 && (
+                          <span className="badge bg-warning text-dark rounded-pill small">
+                            <i className="bi bi-star-fill me-1"></i>Série : {activeCard.easy_streak}/3
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div className="my-3 w-100">
+                        <div className="d-flex align-items-center justify-content-center gap-2">
+                          <p className="display-6 fw-bold mb-0">
+                            {isFlipped ? activeCard.word : activeCard.translation}
+                          </p>
+                          {isFlipped && (
+                            <button 
+                              onClick={(e) => speakWord(activeCard.word, e)} 
+                              className="btn btn-light btn-sm rounded-circle px-2.5 py-1.5 shadow-sm text-dark border-0 ms-2"
+                              title="Écouter la prononciation"
+                            >
+                              <i className="bi bi-volume-up-fill fs-5"></i>
+                            </button>
+                          )}
+                        </div>
+                        
+                        {isFlipped && (
+                          <div className="row justify-content-center align-items-center mt-3 g-3 max-w-lg mx-auto">
+                            {activeCard.image_url && (
+                              <div className="col-5">
+                                <img src={activeCard.image_url} alt="Indice visuel" className="img-fluid rounded-3 shadow-sm border border-white border-opacity-25" style={{ maxHeight: '110px', objectFit: 'cover', width: '100%' }} />
+                              </div>
+                            )}
+                            <div className={activeCard.image_url ? "col-7 text-start" : "col-12"}>
+                              {activeCard.context ? (
+                                <div className="p-2.5 bg-white bg-opacity-10 rounded-3 border border-white border-opacity-10">
+                                  <p className="small mb-0.5 text-uppercase font-monospace text-white opacity-75" style={{ fontSize: '0.75rem' }}>Exemple :</p>
+                                  <p className="fst-italic mb-0 small">{activeCard.context}</p>
+                                </div>
+                              ) : (
+                                <p className="small text-white opacity-50 mb-0 fst-italic">Aucun contexte configuré.</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {isCorrect ? (
+                        <span className="badge bg-white text-success rounded-pill px-3 py-2 btn btn-sm border-0 shadow-sm fw-bold">
+                          <i className="bi bi-arrow-clockwise me-1"></i> Cliquer pour retourner la carte
+                        </span>
+                      ) : (
+                        <span className="badge bg-white bg-opacity-10 text-white rounded-pill px-3 py-2 small border-0 opacity-75">
+                          <i className="bi bi-lock-fill me-1"></i> Saisissez la traduction correcte
                         </span>
                       )}
                     </div>
-                    
-                    <p className="display-6 fw-bold my-3">
-                      {isFlipped ? activeCard.word : activeCard.translation}
-                    </p>
 
-                    {isCorrect ? (
-                      <span className="badge bg-white text-success rounded-pill px-3 py-2 btn btn-sm border-0 shadow-sm fw-bold">
-                        <i className="bi bi-arrow-clockwise me-1"></i> Cliquer pour retourner
-                      </span>
-                    ) : (
-                      <span className="badge bg-white bg-opacity-10 text-white rounded-pill px-3 py-2 small border-0 opacity-75">
-                        <i className="bi bi-lock-fill me-1"></i> Saisissez la traduction correcte
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Champ de vérification */}
-                  <div className="mb-4">
-                    <div className="input-group input-group-lg shadow-sm rounded-3 overflow-hidden">
-                      <span className={`input-group-text border-0 text-white transition-colors ${isCorrect ? 'bg-success' : 'bg-secondary bg-opacity-25 text-dark'}`}>
-                        {isCorrect ? <i className="bi bi-check-lg"></i> : <i className="bi bi-pencil-square"></i>}
-                      </span>
-                      <input 
-                        type="text"
-                        placeholder={isCorrect ? "Trouvé !" : `Commence par : "${firstLetterHint}"...`}
-                        value={userAnswer}
-                        onChange={(e) => setUserAnswer(e.target.value)}
-                        className={`form-control border-0 bg-light ${isCorrect ? 'fw-bold text-success' : ''}`}
-                        disabled={isCorrect && isFlipped}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Choix de planification */}
-                  <div className="d-flex flex-wrap gap-2 align-items-center">
-                    <div className="d-flex gap-2 flex-grow-1">
-                      <button onClick={() => handleReviewScore('hard')} className="btn btn-danger flex-grow-1 py-2.5 rounded-3 fw-medium shadow-sm" disabled={!isCorrect}>
-                        Difficile <span className="d-block small opacity-75 fw-normal">(Demain)</span>
-                      </button>
-                      <button onClick={() => handleReviewScore('medium')} className="btn btn-warning text-dark flex-grow-1 py-2.5 rounded-3 fw-medium shadow-sm" disabled={!isCorrect}>
-                        Moyen <span className="d-block small opacity-75 fw-normal">(2 jours)</span>
-                      </button>
-                      <button onClick={() => handleReviewScore('easy')} className="btn btn-success flex-grow-1 py-2.5 rounded-3 fw-medium shadow-sm" disabled={!isCorrect}>
-                        Facile <span className="d-block small opacity-75 fw-normal">(3 j. consécutifs)</span>
-                      </button>
-                    </div>
-                    {reviewableCards.length > 1 && (
-                      <button onClick={nextCard} className="btn btn-outline-secondary px-4 py-3 rounded-3">Passer</button>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="py-5 text-center border rounded-4 border-dashed bg-light text-muted">
-                  <p className="fw-medium mb-1"><i className="bi bi-calendar-check text-success h4 d-block mb-2"></i>Tout est à jour pour cette langue !</p>
-                  <p className="small mb-0">Revenez demain ou ajoutez de nouveaux termes ci-dessous.</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Formulaire et Gestion */}
-          <div className="card shadow-sm border-0 rounded-4">
-            <div className="card-body p-4">
-              <h3 className="h5 card-title mb-4 text-secondary">{editingId ? 'Modifier le mot' : 'Ajouter un nouveau mot'}</h3>
-              
-              <form onSubmit={handleAddOrUpdate} className="row g-3 mb-4">
-                <div className="col-md-5">
-                  <input type="text" placeholder={`Mot en ${currentLangConfig?.name}`} value={wordInput} onChange={(e) => setWordInput(e.target.value)} className="form-control py-2.5 bg-light border-0 rounded-3" />
-                </div>
-                <div className="col-md-5">
-                  <input type="text" placeholder="Traduction française" value={translationInput} onChange={(e) => setTranslationInput(e.target.value)} className="form-control py-2.5 bg-light border-0 rounded-3" />
-                </div>
-                <div className="col-md-2">
-                  <select value={typeInput} onChange={(e) => setTypeInput(e.target.value)} className="form-select py-2.5 bg-light border-0 rounded-3 text-secondary fw-medium">
-                    <option value="n.">Nom (n.)</option>
-                    <option value="v.">Verbe (v.)</option>
-                    <option value="adj.">Adjectif (adj.)</option>
-                    <option value="adv.">Adverbe (adv.)</option>
-                    <option value="exp.">Expression (exp.)</option>
-                  </select>
-                </div>
-                <div className="col-12 d-flex justify-content-end">
-                  <button type="submit" className="btn btn-primary px-5 py-2.5 rounded-3 shadow-sm">
-                    {editingId ? 'Mettre à jour le mot' : 'Ajouter aux révisions'}
-                  </button>
-                </div>
-              </form>
-
-              {/* Table de Gestion */}
-              <div className="table-responsive border rounded-3 mb-3">
-                <table className="table table-hover align-middle mb-0">
-                  <thead className="table-light text-uppercase small text-muted">
-                    <tr>
-                      <th className="px-4 py-3">Mot ({currentLangConfig?.name})</th>
-                      <th className="px-4 py-3">Nature</th>
-                      <th className="px-4 py-3">Traduction (Fr)</th>
-                      <th className="px-4 py-3 text-end">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentCards.map((card) => (
-                      <tr key={card.id}>
-                        <td className="px-4 py-3 fw-medium text-dark">{card.word}</td>
-                        <td className="px-4 py-3 font-monospace">
-                          <span className="badge bg-light text-secondary border">{card.type || 'n.'}</span>
-                        </td>
-                        <td className="px-4 py-3 text-secondary">{card.translation}</td>
-                        <td className="px-4 py-3 text-end">
-                          <button onClick={() => handleEdit(card)} className="btn btn-sm btn-light text-primary me-2 rounded-2"><i className="bi bi-pencil"></i></button>
-                          <button onClick={() => handleDelete(card.id)} className="btn btn-sm btn-light text-danger rounded-2"><i className="bi bi-trash"></i></button>
-                        </td>
-                      </tr>
-                    ))}
-                    {cards.length === 0 && (
-                      <tr>
-                        <td colSpan="4" className="text-center py-4 text-muted small">Aucun mot enregistré dans cette langue.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <nav className="d-flex justify-content-between align-items-center px-1">
-                  <span className="small text-muted">Affichage de {indexOfFirstItem + 1} à {Math.min(indexOfLastItem, cards.length)} sur {cards.length} mots</span>
-                  <ul className="pagination pagination-sm mb-0">
-                    <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-                      <button type="button" className="page-link rounded-3 me-1" onClick={() => paginate(currentPage - 1)}>Précédent</button>
-                    </li>
-                    {[...Array(totalPages)].map((_, i) => (
-                      <li key={i} className={`page-item ${currentPage === i + 1 ? 'active' : ''}`}>
-                        <button type="button" className="page-link rounded-3 me-1" onClick={() => paginate(i + 1)}>{i + 1}</button>
-                      </li>
-                    ))}
-                    <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-                      <button type="button" className="page-link rounded-3" onClick={() => paginate(currentPage + 1)}>Suivant</button>
-                    </li>
-                  </ul>
-                </nav>
-              )}
-
-            </div>
-          </div>
-
-        </div>
-
-        {/* COLONNE DROITE : Mots maîtrisés */}
-        <div className="col-12 col-lg-4">
-          <div className="card shadow-sm border-0 rounded-4 sticky-top" style={{ top: '2rem' }}>
-            <div className="card-body p-4">
-              <h2 className="h5 card-title mb-4 text-secondary d-flex align-items-center gap-2">
-                <i className="bi bi-check-circle-fill text-success"></i> Maîtrisés ({masteredWords.length})
-              </h2>
-              
-              <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 12rem)' }}>
-                <ul className="list-group list-group-flush gap-2">
-                  {masteredWords.map((item) => (
-                    <li 
-                      key={item.id} 
-                      onClick={() => {
-                        setViewingMasteredItem(item);
-                        setIsMasteredFlipped(false);
-                      }}
-                      className="list-group-item d-flex justify-content-between align-items-center bg-success bg-opacity-10 border border-success border-opacity-10 rounded-3 p-3 transition-colors"
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <div className="d-flex flex-column">
-                        <span className="fw-medium text-success">{item.word}</span>
-                        <span className="small text-success opacity-75 font-monospace">{item.type || 'n.'}</span>
+                    <div className="mb-4">
+                      <div className="input-group input-group-lg shadow-sm rounded-3 overflow-hidden">
+                        <span className={`input-group-text border-0 text-white transition-colors ${isCorrect ? 'bg-success' : 'bg-secondary bg-opacity-25 text-dark'}`}>
+                          {isCorrect ? <i className="bi bi-check-lg"></i> : <i className="bi bi-pencil-square"></i>}
+                        </span>
+                        <input 
+                          type="text"
+                          placeholder={isCorrect ? "Trouvé !" : `Commence par : "${firstLetterHint}"...`}
+                          value={userAnswer}
+                          onChange={(e) => setUserAnswer(e.target.value)}
+                          className={`form-control border-0 bg-light ${isCorrect ? 'fw-bold text-success' : ''}`}
+                          disabled={isCorrect && isFlipped}
+                        />
                       </div>
-                      <div className="d-flex align-items-center gap-2">
-                        <span className="badge bg-success rounded-pill px-2.5 py-1.5 small fw-semibold">Voir</span>
-                        <button onClick={(e) => handleDeleteMastered(e, item.id)} className="btn btn-sm btn-link text-danger p-0 border-0 lh-1">
-                          <i className="bi bi-x-circle-fill h5 mb-0"></i>
+                    </div>
+
+                    <div className="d-flex flex-wrap gap-2 align-items-center">
+                      <div className="d-flex gap-2 flex-grow-1">
+                        <button onClick={() => handleReviewScore('hard')} className="btn btn-danger flex-grow-1 py-2.5 rounded-3 fw-medium shadow-sm" disabled={!isCorrect}>
+                          Difficile <span className="d-block small opacity-75 fw-normal">(Demain)</span>
+                        </button>
+                        <button onClick={() => handleReviewScore('medium')} className="btn btn-warning text-dark flex-grow-1 py-2.5 rounded-3 fw-medium shadow-sm" disabled={!isCorrect}>
+                          Moyen <span className="d-block small opacity-75 fw-normal">(2 jours)</span>
+                        </button>
+                        <button onClick={() => handleReviewScore('easy')} className="btn btn-success flex-grow-1 py-2.5 rounded-3 fw-medium shadow-sm" disabled={!isCorrect}>
+                          Facile <span className="d-block small opacity-75 fw-normal">(3 j. consécutifs)</span>
                         </button>
                       </div>
-                    </li>
-                  ))}
-                  {masteredWords.length === 0 && (
-                    <p className="text-center text-muted small py-4">Aucun mot maîtrisé pour l'instant.</p>
-                  )}
-                </ul>
+                      {reviewableCards.length > 1 && (
+                        <button onClick={nextCard} className="btn btn-outline-secondary px-4 py-3 rounded-3">Passer</button>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-5 text-center border rounded-4 border-dashed bg-light text-muted">
+                    <p className="fw-medium mb-1"><i className="bi bi-calendar-check text-success h4 d-block mb-2"></i>Tout est à jour pour cette langue !</p>
+                    <p className="small mb-0">Revenez demain ou ajoutez de nouveaux termes dans l'onglet de gestion.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="col-12 col-lg-4">
+            <div className="card shadow-sm border-0 rounded-4 sticky-top" style={{ top: '6rem' }}>
+              <div className="card-body p-4">
+                <h2 className="h5 card-title mb-4 text-secondary d-flex align-items-center gap-2">
+                  <i className="bi bi-check-circle-fill text-success"></i> Maîtrisés ({masteredWords.length})
+                </h2>
+                <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 16rem)' }}>
+                  <ul className="list-group list-group-flush gap-2">
+                    {masteredWords.map((item) => (
+                      <li 
+                        key={item.id} 
+                        onClick={() => {
+                          setViewingMasteredItem(item);
+                          setIsMasteredFlipped(false);
+                        }}
+                        className="list-group-item d-flex justify-content-between align-items-center bg-success bg-opacity-10 border border-success border-opacity-10 rounded-3 p-3 transition-colors"
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <div className="d-flex align-items-center gap-2">
+                          {item.image_url && <img src={item.image_url} alt="" className="rounded-2 border" style={{ width: '40px', height: '40px', objectFit: 'cover' }} />}
+                          <div className="d-flex flex-column">
+                            <span className="fw-medium text-success">{item.word}</span>
+                            <span className="small text-success opacity-75 font-monospace">{item.type || 'n.'}</span>
+                          </div>
+                        </div>
+                        <div className="d-flex align-items-center gap-2">
+                          <button onClick={(e) => speakWord(item.word, e)} className="btn btn-sm btn-light rounded-circle text-success px-2 py-1 border-0"><i className="bi bi-volume-up-fill"></i></button>
+                          <span className="badge bg-success rounded-pill px-2.5 py-1.5 small fw-semibold">Voir</span>
+                          <button onClick={(e) => handleDeleteMastered(e, item.id)} className="btn btn-sm btn-link text-danger p-0 border-0 lh-1">
+                            <i className="bi bi-x-circle-fill h5 mb-0"></i>
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                    {masteredWords.length === 0 && (
+                      <p className="text-center text-muted small py-4">Aucun mot maîtrisé pour l'instant.</p>
+                    )}
+                  </ul>
+                </div>
               </div>
             </div>
           </div>
         </div>
+      )}
 
-      </div>
+      {/* VUE 2 : GESTION DU VOCABULAIRE */}
+      {activeTab === 'manage' && (
+        <div className="card shadow-sm border-0 rounded-4">
+          <div className="card-body p-4">
+            <h3 className="h5 card-title mb-4 text-secondary">{editingId ? 'Modifier le mot' : 'Ajouter un nouveau mot'}</h3>
+            
+            <form onSubmit={handleAddOrUpdate} className="row g-3 mb-4">
+              <div className="col-md-5">
+                <label className="form-label small text-muted fw-bold">Mot traduit ({currentLangConfig?.name})</label>
+                <input type="text" placeholder="ex: Scarcity" value={wordInput} onChange={(e) => setWordInput(e.target.value)} className="form-control py-2.5 bg-light border-0 rounded-3" />
+              </div>
+              <div className="col-md-5">
+                <label className="form-label small text-muted fw-bold">Traduction (Français)</label>
+                <input type="text" placeholder="ex: Rareté" value={translationInput} onChange={(e) => setTranslationInput(e.target.value)} className="form-control py-2.5 bg-light border-0 rounded-3" />
+              </div>
+              <div className="col-md-2">
+                <label className="form-label small text-muted fw-bold">Nature</label>
+                <select value={typeInput} onChange={(e) => setTypeInput(e.target.value)} className="form-select py-2.5 bg-light border-0 rounded-3 text-secondary fw-medium">
+                  <option value="n.">Nom (n.)</option>
+                  <option value="v.">Verbe (v.)</option>
+                  <option value="adj.">Adjectif (adj.)</option>
+                  <option value="adv.">Adverbe (adv.)</option>
+                  <option value="exp.">Expression (exp.)</option>
+                </select>
+              </div>
+              <div className="col-12">
+                <label className="form-label small text-muted fw-bold">Exemple ou contexte d'utilisation</label>
+                <textarea rows="2" placeholder="Saisissez une phrase d'exemple..." value={contextInput} onChange={(e) => setContextInput(e.target.value)} className="form-control bg-light border-0 rounded-3"></textarea>
+              </div>
 
-      {/* MODALE DE CONSULTATION */}
+              {/* MODULE DES IMAGES */}
+              <div className="col-12 border rounded-3 p-3 bg-light bg-opacity-50">
+                <label className="form-label small text-secondary fw-bold mb-3 d-block"><i className="bi bi-image me-2"></i>Illustration de la carte (Optionnel)</label>
+                <div className="row g-3">
+                  <div className="col-md-6 border-end">
+                    <span className="d-block small text-muted fw-medium mb-2">Option A : Importer depuis votre PC</span>
+                    <input type="file" accept="image/*" onChange={handleLocalFileUpload} className="form-control btn-sm bg-white" />
+                    {uploading && <div className="small text-primary mt-1"><span className="spinner-border spinner-border-sm me-1"></span>Upload en cours...</div>}
+                  </div>
+                  <div className="col-md-6">
+                    <span className="d-block small text-muted fw-medium mb-2">Option B : Rechercher sur Pixabay</span>
+                    <div className="input-group input-group-sm">
+                      <input type="text" placeholder="Terme en anglais (ex: dog, house...)" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="form-control border" />
+                      <button type="button" onClick={() => searchOnlineImages(searchQuery)} className="btn btn-outline-secondary">Rechercher</button>
+                    </div>
+                    {searchingImages && <div className="small text-muted mt-1">Recherche en cours...</div>}
+                  </div>
+                </div>
+
+                {apiImages.length > 0 && (
+                  <div className="mt-3">
+                    <span className="d-block small text-muted mb-2">Sélectionnez une image :</span>
+                    <div className="row g-2">
+                      {apiImages.map((url, index) => (
+                        <div key={index} className="col-4 col-sm-2" style={{ cursor: 'pointer' }} onClick={() => setImageUrlInput(url)}>
+                          <img src={url} alt="" className={`img-fluid rounded border ${imageUrlInput === url ? 'border-primary border-3' : 'opacity-75'}`} style={{ height: '65px', objectFit: 'cover', width: '100%' }} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {imageUrlInput && (
+                  <div className="mt-3 p-2 bg-white rounded border d-flex align-items-center justify-content-between">
+                    <div className="d-flex align-items-center gap-2 overflow-hidden">
+                      <img src={imageUrlInput} alt="Sélection" className="rounded border" style={{ width: '45px', height: '45px', objectFit: 'cover' }} />
+                      <span className="small text-success text-truncate fw-medium">Image liée avec succès</span>
+                    </div>
+                    <button type="button" onClick={() => setImageUrlInput('')} className="btn btn-sm btn-outline-danger border-0"><i className="bi bi-trash-fill"></i></button>
+                  </div>
+                )}
+              </div>
+
+              <div className="col-12 d-flex justify-content-end">
+                <button type="submit" className="btn btn-primary px-5 py-2.5 rounded-3 shadow-sm" disabled={uploading}>
+                  {editingId ? 'Mettre à jour le mot' : 'Ajouter aux révisions'}
+                </button>
+              </div>
+            </form>
+
+            <div className="table-responsive border rounded-3 mb-3">
+              <table className="table table-hover align-middle mb-0">
+                <thead className="table-light text-uppercase small text-muted">
+                  <tr>
+                    <th className="px-4 py-3">Aperçu</th>
+                    <th className="px-4 py-3">Mot ({currentLangConfig?.name})</th>
+                    <th className="px-4 py-3">Nature</th>
+                    <th className="px-4 py-3">Traduction (Fr)</th>
+                    <th className="px-4 py-3">Contexte / Exemple</th>
+                    <th className="px-4 py-3 text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentCards.map((card) => (
+                    <tr key={card.id}>
+                      <td className="px-4 py-3">
+                        {card.image_url ? (
+                          <img src={card.image_url} alt="" className="rounded border bg-light" style={{ width: '40px', height: '40px', objectFit: 'cover' }} />
+                        ) : (
+                          <div className="bg-light text-muted d-flex align-items-center justify-content-center rounded border" style={{ width: '40px', height: '40px', fontSize: '0.8rem' }}><i className="bi bi-image"></i></div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 fw-medium text-dark">
+                        <button onClick={() => speakWord(card.word)} className="btn btn-sm btn-link p-0 me-2 text-secondary" title="Écouter"><i className="bi bi-volume-up-fill"></i></button>
+                        {card.word}
+                      </td>
+                      <td className="px-4 py-3 font-monospace">
+                        <span className="badge bg-light text-secondary border">{card.type || 'n.'}</span>
+                      </td>
+                      <td className="px-4 py-3 text-secondary">{card.translation}</td>
+                      <td className="px-4 py-3 small text-muted text-truncate" style={{ maxWidth: '240px' }}>{card.context || <span className="text-opacity-25 fst-italic">Aucun contexte</span>}</td>
+                      <td className="px-4 py-3 text-end">
+                        <button onClick={() => handleEdit(card)} className="btn btn-sm btn-light text-primary me-2 rounded-2"><i className="bi bi-pencil"></i></button>
+                        <button onClick={() => handleDelete(card.id)} className="btn btn-sm btn-light text-danger rounded-2"><i className="bi bi-trash"></i></button>
+                      </td>
+                    </tr>
+                  ))}
+                  {cards.length === 0 && (
+                    <tr>
+                      <td colSpan="6" className="text-center py-4 text-muted small">Aucun mot enregistré dans cette langue.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {totalPages > 1 && (
+              <nav className="d-flex justify-content-between align-items-center px-1">
+                <span className="small text-muted">Affichage de {indexOfFirstItem + 1} à {Math.min(indexOfLastItem, cards.length)} sur {cards.length} mots</span>
+                <ul className="pagination pagination-sm mb-0">
+                  <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
+                    <button type="button" className="page-link rounded-3 me-1" onClick={() => paginate(currentPage - 1)}>Précédent</button>
+                  </li>
+                  {[...Array(totalPages)].map((_, i) => (
+                    <li key={i} className={`page-item ${currentPage === i + 1 ? 'active' : ''}`}>
+                      <button type="button" className="page-link rounded-3 me-1" onClick={() => paginate(i + 1)}>{i + 1}</button>
+                    </li>
+                  ))}
+                  <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
+                    <button type="button" className="page-link rounded-3" onClick={() => paginate(currentPage + 1)}>Suivant</button>
+                  </li>
+                </ul>
+              </nav>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODALE DE CONSULTATION MOTS ACQUIS */}
       {viewingMasteredItem && (
         <div className="modal fade show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setViewingMasteredItem(null)}>
           <div className="modal-dialog modal-dialog-centered" onClick={(e) => e.stopPropagation()}>
@@ -541,22 +726,48 @@ export default function App() {
                     background: isMasteredFlipped 
                       ? 'linear-gradient(135deg, #198754 0%, #157347 100%)' 
                       : currentLangConfig?.gradient,
-                    minHeight: '240px',
+                    minHeight: '280px',
                     cursor: 'pointer'
                   }}
                 >
                   <div className="d-flex align-items-center gap-2">
                     <span className="text-uppercase tracking-wider small opacity-75 fw-bold">
-                      {isMasteredFlipped ? 'Traduction Française' : `Mot ${currentLangConfig?.name}`}
+                      {isMasteredFlipped ? 'Traduction & Contexte' : `Mot ${currentLangConfig?.name}`}
                     </span>
                     <span className="badge bg-white bg-opacity-25 text-white rounded-pill font-monospace">
                       {viewingMasteredItem.type || 'n.'}
                     </span>
                   </div>
 
-                  <p className="display-6 fw-bold my-3">
-                    {isMasteredFlipped ? viewingMasteredItem.translation : viewingMasteredItem.word}
-                  </p>
+                  <div className="my-2 w-100">
+                    <div className="d-flex align-items-center justify-content-center gap-2 mb-2">
+                      <p className="display-6 fw-bold mb-0">
+                        {isMasteredFlipped ? viewingMasteredItem.translation : viewingMasteredItem.word}
+                      </p>
+                      {!isMasteredFlipped && (
+                        <button 
+                          onClick={(e) => speakWord(viewingMasteredItem.word, e)} 
+                          className="btn btn-light btn-sm rounded-circle px-2.5 py-1.5 shadow-sm text-dark border-0 ms-2"
+                        >
+                          <i className="bi bi-volume-up-fill fs-5"></i>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Affichage image et métadonnées au verso de la modale */}
+                    {isMasteredFlipped && (
+                      <div className="row justify-content-center align-items-center g-2 max-w-sm mx-auto mt-2">
+                        {viewingMasteredItem.image_url && (
+                          <div className="col-5">
+                            <img src={viewingMasteredItem.image_url} alt="" className="img-fluid rounded-3 border border-white border-opacity-25" style={{ maxHeight: '90px', objectFit: 'cover' }} />
+                          </div>
+                        )}
+                        <div className={viewingMasteredItem.image_url ? "col-7 text-start" : "col-12"}>
+                          {viewingMasteredItem.context && <p className="small fst-italic mb-0 opacity-90">{viewingMasteredItem.context}</p>}
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   <span className="badge bg-white bg-opacity-25 rounded-pill px-3 py-2 small">
                     <i className="bi bi-arrow-clockwise me-1"></i> Cliquer pour retourner
