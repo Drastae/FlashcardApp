@@ -336,6 +336,7 @@ export default function App() {
     );
   }
 
+  // --- ÉCRAN 2 : INTERFACE PRINCIPALE ---
   return (
     <div className="container py-4">
       <style>{`
@@ -558,6 +559,7 @@ export default function App() {
         </div>
       )}
 
+      {/* VUE 2 : GESTION DU VOCABULAIRE */}
       {activeTab === 'manage' && (
         <div className="card shadow-sm border-0 rounded-4">
           <div className="card-body p-4">
@@ -820,4 +822,4 @@ export default function App() {
 
     </div>
   );
-
+}
