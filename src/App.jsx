@@ -8,6 +8,18 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const PIXABAY_API_KEY = import.meta.env.VITE_PIXABAY_API_KEY;
 
+// Liste de drapeaux émojis standards pour simplifier la création sans bug d'affichage
+const AVAILABLE_FLAGS = [
+  { flag: '🇬🇧', label: 'Royaume-Uni (EN)' },
+  { flag: '🇳🇱', label: 'Pays-Bas (NL)' },
+  { flag: '🇩🇪', label: 'Allemagne (DE)' },
+  { flag: '🇪🇸', label: 'Espagne (ES)' },
+  { flag: '🇮🇹', label: 'Italie (IT)' },
+  { flag: '🇵🇹', label: 'Portugal (PT)' },
+  { flag: '🇯🇵', label: 'Japon (JA)' },
+  { flag: '🇨🇳', label: 'Chine (ZH)' }
+];
+
 export default function App() {
   // --- ÉTAT DU THÈME (DARK MODE) ---
   const [darkMode, setDarkMode] = useState(() => {
@@ -29,7 +41,7 @@ export default function App() {
   const [showLangForm, setShowLangForm] = useState(false);
   const [langIdInput, setLangIdInput] = useState('');
   const [langNameInput, setLangNameInput] = useState('');
-  const [langFlagInput, setLangFlagInput] = useState('');
+  const [langFlagInput, setLangFlagInput] = useState('🇬🇧');
   const [langLocaleInput, setLangLocaleInput] = useState('');
   const [langColorStart, setLangColorStart] = useState('#1e3a8a');
   const [langColorEnd, setLangColorEnd] = useState('#3b82f6');
@@ -332,7 +344,7 @@ export default function App() {
     const langData = {
       id: langIdInput.trim().toLowerCase(),
       name: langNameInput.trim(),
-      flag: langFlagInput.trim().toUpperCase(),
+      flag: langFlagInput.trim(),
       locale: langLocaleInput.trim() || 'en-US',
       color_start: langColorStart,
       color_end: langColorEnd
@@ -342,7 +354,7 @@ export default function App() {
     if (!error) {
       setLangIdInput('');
       setLangNameInput('');
-      setLangFlagInput('');
+      setLangFlagInput('🇬🇧');
       setLangLocaleInput('');
       setShowLangForm(false);
       await fetchLanguages();
@@ -411,9 +423,7 @@ export default function App() {
   if (!selectedLang) {
     return (
       <div className="container py-5 min-h-screen d-flex flex-column justify-content-center align-items-center">
-        {/* Intégration globale des styles CSS spécifiques aux animations 3D du Panda */}
         <style>{`
-          /* STYLE DU PANDA 3D ET DE SA BULLE */
           .panda-container {
             display: flex;
             flex-direction: column;
@@ -563,8 +573,12 @@ export default function App() {
                 <input type="text" className="form-control" placeholder="es" value={langIdInput} onChange={(e) => setLangIdInput(e.target.value)} required />
               </div>
               <div className="col-6">
-                <label className="form-label small fw-bold">Drapeau (Texte court)</label>
-                <input type="text" className="form-control" placeholder="ES" value={langFlagInput} onChange={(e) => setLangFlagInput(e.target.value)} required />
+                <label className="form-label small fw-bold">Sélectionner un drapeau</label>
+                <select className="form-select" value={langFlagInput} onChange={(e) => setLangFlagInput(e.target.value)} required>
+                  {AVAILABLE_FLAGS.map((f, index) => (
+                    <option key={index} value={f.flag}>{f.flag} - {f.label}</option>
+                  ))}
+                </select>
               </div>
               <div className="col-12">
                 <label className="form-label small fw-bold">Nom de la langue</label>
@@ -574,14 +588,23 @@ export default function App() {
                 <label className="form-label small fw-bold">Locale Synthèse vocale (ex: es-ES)</label>
                 <input type="text" className="form-control" placeholder="es-ES" value={langLocaleInput} onChange={(e) => setLangLocaleInput(e.target.value)} />
               </div>
+              
+              {/* Amélioration explicite des champs couleurs */}
               <div className="col-6">
-                <label className="form-label small fw-bold">Couleur Principale</label>
-                <input type="color" className="form-control form-control-color w-100" value={langColorStart} onChange={(e) => setLangColorStart(e.target.value)} />
+                <label className="form-label small fw-bold text-truncate d-block">Couleur Gauche (Dégradé)</label>
+                <div className="input-group">
+                  <span className="input-group-text small bg-secondary bg-opacity-10 text-muted"><i className="bi bi-palette"></i></span>
+                  <input type="color" className="form-control form-control-color flex-grow-1 w-auto" value={langColorStart} onChange={(e) => setLangColorStart(e.target.value)} title="Choisir la couleur de gauche" />
+                </div>
               </div>
               <div className="col-6">
-                <label className="form-label small fw-bold">Couleur Secondaire</label>
-                <input type="color" className="form-control form-control-color w-100" value={langColorEnd} onChange={(e) => setLangColorEnd(e.target.value)} />
+                <label className="form-label small fw-bold text-truncate d-block">Couleur Droite (Dégradé)</label>
+                <div className="input-group">
+                  <span className="input-group-text small bg-secondary bg-opacity-10 text-muted"><i className="bi bi-palette-fill"></i></span>
+                  <input type="color" className="form-control form-control-color flex-grow-1 w-auto" value={langColorEnd} onChange={(e) => setLangColorEnd(e.target.value)} title="Choisir la couleur de droite" />
+                </div>
               </div>
+
               <div className="col-12">
                 <button type="submit" className="btn btn-success w-100 rounded-3">Enregistrer la configuration</button>
               </div>
@@ -610,7 +633,7 @@ export default function App() {
               >
                 <div className="d-flex align-items-center justify-content-between z-1">
                   <div className="d-flex align-items-center gap-3">
-                    <span className="badge bg-white bg-opacity-25 fs-5 px-3 py-2 rounded-3 font-monospace fw-bold">{lang.flag}</span>
+                    <span className="badge bg-white bg-opacity-25 fs-4 px-2.5 py-1.5 rounded-3 font-monospace fw-bold">{lang.flag}</span>
                     <span className="fs-4 fw-bold">{lang.name}</span>
                   </div>
                   <div className="d-flex align-items-center gap-2">
@@ -651,7 +674,6 @@ export default function App() {
   // --- ÉCRAN 2 : INTERFACE PRINCIPALE ---
   return (
     <div className="container py-4">
-      {/* Styles d'animation CSS 3D & Micro-interactions */}
       <style>{`
         @keyframes pulse-success {
           0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.7); }
@@ -721,7 +743,7 @@ export default function App() {
         <div className="d-flex align-items-center justify-content-between w-100 w-md-auto">
           <div className="d-flex align-items-center gap-2">
             {renderMiniPandaLogo()}
-            <span className="badge bg-secondary bg-opacity-10 text-secondary fs-6 px-2.5 py-1.5 rounded-2 font-monospace fw-bold">{currentLangConfig?.flag}</span>
+            <span className="badge bg-secondary bg-opacity-10 text-secondary fs-5 px-2.5 py-1.5 rounded-2 font-monospace fw-bold">{currentLangConfig?.flag}</span>
             <h1 className="h4 mb-0 fw-bold">Espace {currentLangConfig?.name}</h1>
           </div>
           <button onClick={() => setDarkMode(!darkMode)} className="btn btn-outline-secondary rounded-circle px-2 py-1.5 d-md-none ms-2">
