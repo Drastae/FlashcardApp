@@ -395,26 +395,166 @@ export default function App() {
 
   const paginate = (pageNumber) => setCurrentPage(pageNumber);
 
+  // --- RENDER DU LOGO PANDA EN MINI (POUR L'ONGLET/NAVBAR) ---
+  const renderMiniPandaLogo = () => (
+    <div className="mini-panda-logo me-2 d-inline-block position-relative" style={{ width: '32px', height: '32px' }}>
+      <div className="bg-white rounded-circle position-absolute w-100 h-100 border border-dark shadow-sm" style={{ top: 0, left: 0 }}></div>
+      <div className="bg-dark rounded-circle position-absolute" style={{ width: '10px', height: '10px', top: '-2px', left: '-1px' }}></div>
+      <div className="bg-dark rounded-circle position-absolute" style={{ width: '10px', height: '10px', top: '-2px', right: '-1px' }}></div>
+      <div className="bg-dark rounded-circle position-absolute" style={{ width: '7px', height: '5px', top: '9px', left: '6px', transform: 'rotate(-15deg)' }}></div>
+      <div className="bg-dark rounded-circle position-absolute" style={{ width: '7px', height: '5px', top: '9px', right: '6px', transform: 'rotate(15deg)' }}></div>
+      <div className="bg-dark rounded-circle position-absolute" style={{ width: '5px', height: '4px', top: '15px', left: '14px' }}></div>
+    </div>
+  );
+
   // --- ÉCRAN 1 : CHOIX & CONFIGURATION DE LA LANGUE ---
   if (!selectedLang) {
     return (
       <div className="container py-5 min-h-screen d-flex flex-column justify-content-center align-items-center">
+        {/* Intégration globale des styles CSS spécifiques aux animations 3D du Panda */}
+        <style>{`
+          /* STYLE DU PANDA 3D ET DE SA BULLE */
+          .panda-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 2rem;
+            perspective: 800px;
+          }
+          .panda-bubble {
+            background: var(--bs-body-bg);
+            border: 2px solid var(--bs-border-color);
+            border-radius: 1.25rem;
+            padding: 0.75rem 1.25rem;
+            position: relative;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            font-weight: 600;
+            max-width: 280px;
+            text-align: center;
+          }
+          .panda-bubble::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 10px 10px 0;
+            border-style: solid;
+            border-color: var(--bs-border-color) transparent;
+            display: block;
+            width: 0;
+          }
+          .panda-bubble::before {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 9px 9px 0;
+            border-style: solid;
+            border-color: var(--bs-body-bg) transparent;
+            z-index: 1;
+            display: block;
+            width: 0;
+          }
+          .panda-avatar-3d {
+            width: 100px;
+            height: 100px;
+            position: relative;
+            transform-style: preserve-3d;
+            animation: pandaFloat 4s ease-in-out infinite;
+            transition: transform 0.3s;
+          }
+          .panda-avatar-3d:hover {
+            transform: rotateY(15deg) rotateX(10deg) scale(1.05);
+          }
+          .panda-head {
+            width: 90px;
+            height: 85px;
+            background: #ffffff;
+            border: 3px solid #111827;
+            border-radius: 50% 50% 45% 45%;
+            position: absolute;
+            top: 10px;
+            left: 5px;
+            box-shadow: inset -8px -8px 0px rgba(0,0,0,0.05);
+          }
+          .panda-ear {
+            width: 28px;
+            height: 28px;
+            background: #111827;
+            border-radius: 50%;
+            position: absolute;
+            top: 0;
+          }
+          .panda-ear.left { left: 0; }
+          .panda-ear.right { right: 0; }
+          .panda-eye-patch {
+            width: 24px;
+            height: 32px;
+            background: #111827;
+            border-radius: 50% 50% 45% 45%;
+            position: absolute;
+            top: 25px;
+            transform: rotate(-15deg);
+          }
+          .panda-eye-patch.left { left: 16px; }
+          .panda-eye-patch.right { right: 16px; transform: rotate(15deg); }
+          .panda-eye-pupil {
+            width: 8px;
+            height: 8px;
+            background: #ffffff;
+            border-radius: 50%;
+            position: absolute;
+            top: 10px;
+            left: 8px;
+          }
+          .panda-nose {
+            width: 14px;
+            height: 9px;
+            background: #111827;
+            border-radius: 50% 50% 45% 45%;
+            position: absolute;
+            top: 52px;
+            left: 38px;
+          }
+          @keyframes pandaFloat {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-6px) rotate(1deg); }
+          }
+        `}</style>
+
         <div className="position-absolute top-0 end-0 m-3">
           <button onClick={() => setDarkMode(!darkMode)} className="btn btn-outline-secondary rounded-circle px-2 py-1.5">
             {darkMode ? <i className="bi bi-sun-fill"></i> : <i className="bi bi-moon-fill"></i>}
           </button>
         </div>
         
+        {/* ZONE AVATAR PANDA 3D SUR LA PAGE ACCUEIL */}
+        <div className="panda-container">
+          <div className="panda-bubble">
+            Coucou, veux-tu apprendre une langue ?
+          </div>
+          <div className="panda-avatar-3d">
+            <div className="panda-ear left"></div>
+            <div className="panda-ear right"></div>
+            <div className="panda-head">
+              <div className="panda-eye-patch left"><div className="panda-eye-pupil"></div></div>
+              <div className="panda-eye-patch right"><div className="panda-eye-pupil"></div></div>
+              <div className="panda-nose"></div>
+            </div>
+          </div>
+        </div>
+
         <div className="text-center mb-4">
-          <h1 className="display-5 fw-extrabold mb-2">Vocabulaire & Flashcards</h1>
-          <p className="text-muted fs-5">Choisissez ou créez la liste de langue à réviser</p>
+          <h1 className="display-6 fw-extrabold mb-2">Vocabulaire & Flashcards</h1>
           <button onClick={() => setShowLangForm(!showLangForm)} className="btn btn-primary mt-2 rounded-3">
             <i className={`bi ${showLangForm ? 'bi-x-circle' : 'bi-plus-circle'} me-2`}></i>
             {showLangForm ? 'Fermer le formulaire' : 'Ajouter / Modifier une langue'}
           </button>
         </div>
 
-        {/* Formulaire dynamique de création/gestion des couleurs des langues */}
         {showLangForm && (
           <div className="card p-4 shadow-sm border-0 rounded-4 w-100 max-w-md mb-4 bg-body-tertiary">
             <form onSubmit={handleAddOrUpdateLanguage} className="row g-3">
@@ -576,10 +716,11 @@ export default function App() {
         .feedback-incorrect { border: 2px solid #dc3545 !important; box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.25) !important; }
       `}</style>
 
-      {/* Navigation supérieure adaptative mobile */}
+      {/* Navigation supérieure adaptative mobile avec le MINI LOGO PANDA */}
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4 bg-body-tertiary p-3 rounded-4 shadow-sm">
         <div className="d-flex align-items-center justify-content-between w-100 w-md-auto">
-          <div className="d-flex align-items-center gap-3">
+          <div className="d-flex align-items-center gap-2">
+            {renderMiniPandaLogo()}
             <span className="badge bg-secondary bg-opacity-10 text-secondary fs-6 px-2.5 py-1.5 rounded-2 font-monospace fw-bold">{currentLangConfig?.flag}</span>
             <h1 className="h4 mb-0 fw-bold">Espace {currentLangConfig?.name}</h1>
           </div>
@@ -635,7 +776,7 @@ export default function App() {
 
                 {reviewableCards.length > 0 ? (
                   <div>
-                    {/* CONTENEUR ANIMATION FLIP 3D AVEC COULEUR DYNAMIQUE BASE DE DONNEES */}
+                    {/* CONTENEUR ANIMATION FLIP 3D */}
                     <div className={`flip-container mb-4 ${isFlipped ? 'flipped' : ''}`}>
                       <div className="flip-card-inner">
                         
