@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 // Initialisation du client Supabase
@@ -7,12 +7,6 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const PIXABAY_API_KEY = import.meta.env.VITE_PIXABAY_API_KEY;
-
-const LANGUAGES = [
-  { id: 'en', name: 'Anglais', flag: 'EN', locale: 'en-US', gradient: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%)' },
-  { id: 'nl', name: 'Néerlandais', flag: 'NL', locale: 'nl-NL', gradient: 'linear-gradient(135deg, #c2410c 0%, #f97316 100%)' },
-  { id: 'de', name: 'Allemand', flag: 'DE', locale: 'de-DE', gradient: 'linear-gradient(135deg, #111827 0%, #374151 100%)' }
-];
 
 export default function App() {
   // --- ÉTAT DU THÈME (DARK MODE) ---
@@ -25,10 +19,20 @@ export default function App() {
     localStorage.setItem('fc_dark_mode', darkMode);
   }, [darkMode]);
 
-  // --- ÉTAT DE LA LANGUE ---
+  // --- ÉTATS DES LANGUES (DYNAMIQUES VIA SUPABASE) ---
+  const [languages, setLanguages] = useState([]);
   const [selectedLang, setSelectedLang] = useState(() => {
     return localStorage.getItem('fc_selected_lang') || null;
   });
+
+  // Formulaire de création/édition de langue
+  const [showLangForm, setShowLangForm] = useState(false);
+  const [langIdInput, setLangIdInput] = useState('');
+  const [langNameInput, setLangNameInput] = useState('');
+  const [langFlagInput, setLangFlagInput] = useState('');
+  const [langLocaleInput, setLangLocaleInput] = useState('');
+  const [langColorStart, setLangColorStart] = useState('#1e3a8a');
+  const [langColorEnd, setLangColorEnd] = useState('#3b82f6');
 
   // --- ÉTAT DE L'ONGLET ACTIF ---
   const [activeTab, setActiveTab] = useState('review');
@@ -46,6 +50,12 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
 
+  // Charger la liste des langues disponibles
+  const fetchLanguages = async () => {
+    const { data, error } = await supabase.from('languages').select('*').order('name');
+    if (!error && data) setLanguages(data);
+  };
+
   const fetchScoresAndCards = async () => {
     if (!selectedLang) return;
     setLoading(true);
@@ -61,6 +71,10 @@ export default function App() {
   };
 
   useEffect(() => {
+    fetchLanguages();
+  }, []);
+
+  useEffect(() => {
     fetchScoresAndCards();
   }, [selectedLang]);
 
@@ -70,10 +84,10 @@ export default function App() {
   
   const [userAnswer, setUserAnswer] = useState('');
   const [isCorrect, setIsCorrect] = useState(false);
-  const [inputFeedback, setInputFeedback] = useState('neutral'); // neutral, partial-correct, incorrect
+  const [inputFeedback, setInputFeedback] = useState('neutral');
   const [triggerSuccessAnim, setTriggerSuccessAnim] = useState(false);
 
-  // Formulaires & Médias
+  // Formulaires & Médias (Vocabulaire)
   const [wordInput, setWordInput] = useState('');
   const [translationInput, setTranslationInput] = useState('');
   const [typeInput, setTypeInput] = useState('n.');
@@ -94,7 +108,7 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  const currentLangConfig = LANGUAGES.find(l => l.id === selectedLang);
+  const currentLangConfig = languages.find(l => l.id === selectedLang);
   const todayStr = new Date().toISOString().split('T')[0];
   
   const reviewableCards = cards.filter(card => {
@@ -193,7 +207,7 @@ export default function App() {
     if (cleanUser === cleanTarget) {
       setIsCorrect(true);
       setInputFeedback('partial-correct');
-      setIsFlipped(true); // Inverse automatiquement la carte vers le verso dès que le mot est juste
+      setIsFlipped(true); 
       setTriggerSuccessAnim(true);
       const timer = setTimeout(() => setTriggerSuccessAnim(false), 600);
       return () => clearTimeout(timer);
@@ -247,7 +261,6 @@ export default function App() {
     targetDate.setDate(targetDate.getDate() + interval);
     const nextReviewStr = targetDate.toISOString().split('T')[0];
 
-    // 1. Envoyer la mise à jour à Supabase
     await supabase
       .from('cards')
       .update({ 
@@ -258,12 +271,11 @@ export default function App() {
       })
       .eq('id', activeCard.id);
 
-    // 2. Laisser un délai visuel pour que l'utilisateur lise la carte retournée avant de passer à la suite
     setTimeout(async () => {
       resetVerification();
       await fetchScoresAndCards();
       adjustActiveIndexAfterRemoval(reviewableCards.length - 1);
-    }, 1200); // 1.2 seconde d'affichage du verso avant de charger la carte suivante
+    }, 1200); 
   };
 
   const adjustActiveIndexAfterRemoval = (remainingCount) => {
@@ -274,7 +286,7 @@ export default function App() {
     }
   };
 
-  // --- ACTIONS DU FORMULAIRE ---
+  // --- ACTIONS DU FORMULAIRE VOCABULAIRE ---
   const handleAddOrUpdate = async (e) => {
     e.preventDefault();
     if (!wordInput.trim() || !translationInput.trim()) return;
@@ -312,6 +324,42 @@ export default function App() {
     await fetchScoresAndCards();
   };
 
+  // --- ACTIONS DE GESTION DES LISTES DE LANGUES ---
+  const handleAddOrUpdateLanguage = async (e) => {
+    e.preventDefault();
+    if (!langIdInput.trim() || !langNameInput.trim() || !langFlagInput.trim()) return;
+
+    const langData = {
+      id: langIdInput.trim().toLowerCase(),
+      name: langNameInput.trim(),
+      flag: langFlagInput.trim().toUpperCase(),
+      locale: langLocaleInput.trim() || 'en-US',
+      color_start: langColorStart,
+      color_end: langColorEnd
+    };
+
+    const { error } = await supabase.from('languages').upsert([langData]);
+    if (!error) {
+      setLangIdInput('');
+      setLangNameInput('');
+      setLangFlagInput('');
+      setLangLocaleInput('');
+      setShowLangForm(false);
+      await fetchLanguages();
+    }
+  };
+
+  const handleDeleteLanguage = async (e, id) => {
+    e.stopPropagation();
+    if (window.confirm("Voulez-vous vraiment supprimer cette langue ? Cela effacera toutes les flashcards associées.")) {
+      const { error } = await supabase.from('languages').delete().eq('id', id);
+      if (!error) {
+        if (selectedLang === id) setSelectedLang(null);
+        await fetchLanguages();
+      }
+    }
+  };
+
   const handleEdit = (card) => {
     setEditingId(card.id);
     setWordInput(card.word);
@@ -347,7 +395,7 @@ export default function App() {
 
   const paginate = (pageNumber) => setCurrentPage(pageNumber);
 
-  // --- ÉCRAN 1 : CHOIX DE LA LANGUE ---
+  // --- ÉCRAN 1 : CHOIX & CONFIGURATION DE LA LANGUE ---
   if (!selectedLang) {
     return (
       <div className="container py-5 min-h-screen d-flex flex-column justify-content-center align-items-center">
@@ -356,33 +404,105 @@ export default function App() {
             {darkMode ? <i className="bi bi-sun-fill"></i> : <i className="bi bi-moon-fill"></i>}
           </button>
         </div>
-        <div className="text-center mb-5">
+        
+        <div className="text-center mb-4">
           <h1 className="display-5 fw-extrabold mb-2">Vocabulaire & Flashcards</h1>
-          <p className="text-muted fs-5">Choisissez la langue que vous souhaitez réviser ou enrichir aujourd'hui</p>
+          <p className="text-muted fs-5">Choisissez ou créez la liste de langue à réviser</p>
+          <button onClick={() => setShowLangForm(!showLangForm)} className="btn btn-primary mt-2 rounded-3">
+            <i className={`bi ${showLangForm ? 'bi-x-circle' : 'bi-plus-circle'} me-2`}></i>
+            {showLangForm ? 'Fermer le formulaire' : 'Ajouter / Modifier une langue'}
+          </button>
         </div>
+
+        {/* Formulaire dynamique de création/gestion des couleurs des langues */}
+        {showLangForm && (
+          <div className="card p-4 shadow-sm border-0 rounded-4 w-100 max-w-md mb-4 bg-body-tertiary">
+            <form onSubmit={handleAddOrUpdateLanguage} className="row g-3">
+              <div className="col-6">
+                <label className="form-label small fw-bold">Code unique (ex: es, it)</label>
+                <input type="text" className="form-control" placeholder="es" value={langIdInput} onChange={(e) => setLangIdInput(e.target.value)} required />
+              </div>
+              <div className="col-6">
+                <label className="form-label small fw-bold">Drapeau (Texte court)</label>
+                <input type="text" className="form-control" placeholder="ES" value={langFlagInput} onChange={(e) => setLangFlagInput(e.target.value)} required />
+              </div>
+              <div className="col-12">
+                <label className="form-label small fw-bold">Nom de la langue</label>
+                <input type="text" className="form-control" placeholder="Espagnol" value={langNameInput} onChange={(e) => setLangNameInput(e.target.value)} required />
+              </div>
+              <div className="col-12">
+                <label className="form-label small fw-bold">Locale Synthèse vocale (ex: es-ES)</label>
+                <input type="text" className="form-control" placeholder="es-ES" value={langLocaleInput} onChange={(e) => setLangLocaleInput(e.target.value)} />
+              </div>
+              <div className="col-6">
+                <label className="form-label small fw-bold">Couleur Principale</label>
+                <input type="color" className="form-control form-control-color w-100" value={langColorStart} onChange={(e) => setLangColorStart(e.target.value)} />
+              </div>
+              <div className="col-6">
+                <label className="form-label small fw-bold">Couleur Secondaire</label>
+                <input type="color" className="form-control form-control-color w-100" value={langColorEnd} onChange={(e) => setLangColorEnd(e.target.value)} />
+              </div>
+              <div className="col-12">
+                <button type="submit" className="btn btn-success w-100 rounded-3">Enregistrer la configuration</button>
+              </div>
+            </form>
+          </div>
+        )}
+
         <div className="row g-4 w-100 max-w-md justify-content-center">
-          {LANGUAGES.map((lang) => (
+          {languages.map((lang) => (
             <div key={lang.id} className="col-12">
-              <button
+              <div 
                 onClick={() => {
                   setSelectedLang(lang.id);
                   setCurrentCardIndex(0);
                   setActiveTab('review');
                   resetVerification();
                 }}
-                className="btn w-100 p-4 rounded-4 shadow-sm text-white text-start d-flex align-items-center justify-content-between border-0 transition-transform"
-                style={{ background: lang.gradient, transform: 'scale(1)', transition: 'transform 0.2s' }}
+                className="card p-3 rounded-4 shadow-sm text-white border-0 transition-transform position-relative overflow-hidden"
+                style={{ 
+                  background: `linear-gradient(135deg, ${lang.color_start} 0%, ${lang.color_end} 100%)`, 
+                  cursor: 'pointer',
+                  transition: 'transform 0.2s' 
+                }}
                 onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
                 onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
               >
-                <div className="d-flex align-items-center gap-3">
-                  <span className="badge bg-white bg-opacity-25 fs-5 px-3 py-2 rounded-3 font-monospace fw-bold">{lang.flag}</span>
-                  <span className="fs-4 fw-bold">{lang.name}</span>
+                <div className="d-flex align-items-center justify-content-between z-1">
+                  <div className="d-flex align-items-center gap-3">
+                    <span className="badge bg-white bg-opacity-25 fs-5 px-3 py-2 rounded-3 font-monospace fw-bold">{lang.flag}</span>
+                    <span className="fs-4 fw-bold">{lang.name}</span>
+                  </div>
+                  <div className="d-flex align-items-center gap-2">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLangIdInput(lang.id);
+                        setLangNameInput(lang.name);
+                        setLangFlagInput(lang.flag);
+                        setLangLocaleInput(lang.locale);
+                        setLangColorStart(lang.color_start);
+                        setLangColorEnd(lang.color_end);
+                        setShowLangForm(true);
+                      }}
+                      className="btn btn-sm btn-light bg-opacity-25 border-0 text-white"
+                      title="Modifier les couleurs"
+                    >
+                      <i className="bi bi-palette-fill"></i>
+                    </button>
+                    <button 
+                      onClick={(e) => handleDeleteLanguage(e, lang.id)} 
+                      className="btn btn-sm btn-danger bg-opacity-75 border-0 text-white"
+                      title="Supprimer la liste"
+                    >
+                      <i className="bi bi-trash-fill"></i>
+                    </button>
+                  </div>
                 </div>
-                <i className="bi bi-arrow-right-circle fs-3 opacity-75"></i>
-              </button>
+              </div>
             </div>
           ))}
+          {languages.length === 0 && <p className="text-center text-muted small">Aucune langue configurée. Utilisez le bouton ci-dessus.</p>}
         </div>
       </div>
     );
@@ -400,7 +520,6 @@ export default function App() {
         }
         .anim-success { animation: pulse-success 0.6s ease-out; }
 
-        /* PERSPECTIVE & CONTAINER FLIP 3D */
         .flip-container {
           perspective: 1000px;
           width: 100%;
@@ -436,7 +555,6 @@ export default function App() {
           transform: rotateY(180deg);
         }
 
-        /* STICKY BOTTOM SUR MOBILE */
         @media (max-width: 767.98px) {
           .mobile-sticky-actions {
             position: fixed;
@@ -450,12 +568,9 @@ export default function App() {
             box-shadow: 0 -0.5rem 1.5rem rgba(0,0,0,0.1);
             z-index: 1030;
           }
-          body {
-            padding-bottom: 80px; /* Évite la superposition des boutons fixes avec le contenu */
-          }
+          body { padding-bottom: 80px; }
         }
 
-        /* MICRO-INTERACTIONS BORDURES Saisie */
         .feedback-neutral { border: 2px solid transparent !important; }
         .feedback-partial-correct { border: 2px solid #198754 !important; box-shadow: 0 0 0 0.25rem rgba(25, 135, 84, 0.25) !important; }
         .feedback-incorrect { border: 2px solid #dc3545 !important; box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.25) !important; }
@@ -520,14 +635,14 @@ export default function App() {
 
                 {reviewableCards.length > 0 ? (
                   <div>
-                    {/* CONTENEUR ANIMATION FLIP 3D */}
+                    {/* CONTENEUR ANIMATION FLIP 3D AVEC COULEUR DYNAMIQUE BASE DE DONNEES */}
                     <div className={`flip-container mb-4 ${isFlipped ? 'flipped' : ''}`}>
                       <div className="flip-card-inner">
                         
                         {/* RECTO : MOT FRANÇAIS */}
                         <div 
                           className={`flip-card-front text-white flex-column ${triggerSuccessAnim ? 'anim-success' : ''}`}
-                          style={{ background: currentLangConfig?.gradient }}
+                          style={{ background: `linear-gradient(135deg, ${currentLangConfig?.color_start} 0%, ${currentLangConfig?.color_end} 100%)` }}
                         >
                           <div className="d-flex align-items-center justify-content-between w-100">
                             <span className="text-uppercase tracking-wider small opacity-75 fw-bold">Mot Français</span>
@@ -590,7 +705,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* CHAMP DE SAISIE AVEC MICRO-INTERACTIONS FLUIDES */}
+                    {/* CHAMP DE SAISIE */}
                     <div className="mb-4">
                       <div className="input-group input-group-lg shadow-sm rounded-3 overflow-hidden">
                         <span className={`input-group-text border-0 text-white transition-colors ${isCorrect ? 'bg-success' : 'bg-secondary bg-opacity-25 text-body'}`}>
@@ -610,7 +725,7 @@ export default function App() {
                       </div>
                     </div>
 
-                    {/* COMPORTEMENT DES BOUTONS ET CONTRAINTE STICKY MOBILE */}
+                    {/* ACTIONS STICKY MOBILE */}
                     <div className="mobile-sticky-actions">
                       <div className="d-flex flex-wrap gap-2 align-items-center max-w-lg mx-auto">
                         <div className="d-flex gap-2 flex-grow-1">
@@ -816,7 +931,7 @@ export default function App() {
               </table>
             </div>
 
-            {/* VUE LISTE DE CARTES : MOBILE (MOBILE FIRST) */}
+            {/* VUE LISTE DE CARTES : MOBILE */}
             <div className="d-block d-md-none mb-3">
               {currentCards.map((card) => (
                 <div key={card.id} className="card p-3 mb-2 border rounded-3 bg-body shadow-sm">
@@ -896,7 +1011,7 @@ export default function App() {
                   style={{
                     background: isMasteredFlipped 
                       ? 'linear-gradient(135deg, #198754 0%, #157347 100%)' 
-                      : currentLangConfig?.gradient,
+                      : `linear-gradient(135deg, ${currentLangConfig?.color_start} 0%, ${currentLangConfig?.color_end} 100%)`,
                     minHeight: '280px',
                     cursor: 'pointer'
                   }}
@@ -925,7 +1040,6 @@ export default function App() {
                       )}
                     </div>
 
-                    {/* Affichage image et métadonnées au verso de la modale */}
                     {isMasteredFlipped && (
                       <div className="row justify-content-center align-items-center g-2 max-w-sm mx-auto mt-2">
                         {viewingMasteredItem.image_url && (
