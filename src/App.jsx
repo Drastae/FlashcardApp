@@ -33,7 +33,6 @@ export default function App() {
 
   // --- ÉTATS DES DONNÉES ---
   const [cards, setCards] = useState([]);
-  const [masteredWords, setMasteredWords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -41,20 +40,13 @@ export default function App() {
     if (!selectedLang) return;
     setLoading(true);
     
-    const { data: fetchedCards, error: err1 } = await supabase
+    const { data: fetchedCards, error } = await supabase
       .from('cards')
       .select('*')
       .eq('lang', selectedLang)
       .order('id', { ascending: false });
 
-    const { data: fetchedMastered, error: err2 } = await supabase
-      .from('mastered_words')
-      .select('*')
-      .eq('lang', selectedLang)
-      .order('created_at', { ascending: false });
-
-    if (!err1 && fetchedCards) setCards(fetchedCards);
-    if (!err2 && fetchedMastered) setMasteredWords(fetchedMastered);
+    if (!error && fetchedCards) setCards(fetchedCards);
     setLoading(false);
   };
 
@@ -94,10 +86,13 @@ export default function App() {
   const currentLangConfig = LANGUAGES.find(l => l.id === selectedLang);
   const todayStr = new Date().toISOString().split('T')[0];
   
+  // Séparation ANKI : Cartes à réviser vs Cartes acquises à long terme (intervalle >= 21 jours)
   const reviewableCards = cards.filter(card => {
     if (!card.next_review) return true;
     return card.next_review <= todayStr;
   });
+
+  const masteredWords = cards.filter(card => card.interval >= 21);
 
   const activeCard = reviewableCards[currentCardIndex];
   const firstLetterHint = activeCard && activeCard.word ? activeCard.word.trim().charAt(0).toUpperCase() : '';
@@ -129,6 +124,14 @@ export default function App() {
       console.error("Erreur de recherche d'images:", error);
     } finally {
       setSearchingImages(false);
+    }
+  };
+
+  // --- INTERCEPTION TOUCHE ENTRÉE SUR LE CHAMP PIXABAY ---
+  const handlePixabayKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault(); // Empêche la soumission du formulaire global
+      searchOnlineImages(searchQuery); // Lance la recherche Pixabay
     }
   };
 
@@ -188,33 +191,49 @@ export default function App() {
     setIsFlipped(false);
   };
 
-  // --- LOGIQUE DE RÉVISION ---
-  const handleReviewScore = async (level) => {
+  // --- ALGORITHME DE RÉPÉTITION ESPACÉE ANKI (SM-2) ---
+  const handleReviewScore = async (performance) => {
     if (!activeCard) return;
 
-    const targetDate = new Date();
+    let repetitions = activeCard.repetitions ?? 0;
+    let interval = activeCard.interval ?? 0;
+    let easeFactor = activeCard.ease_factor ?? 2.5;
 
-    if (level === 'hard') {
-      targetDate.setDate(targetDate.getDate() + 1);
-      const nextReviewStr = targetDate.toISOString().split('T')[0];
-      await supabase.from('cards').update({ next_review: nextReviewStr, easy_streak: 0 }).eq('id', activeCard.id);
-      
-    } else if (level === 'medium') {
-      targetDate.setDate(targetDate.getDate() + 2);
-      const nextReviewStr = targetDate.toISOString().split('T')[0];
-      await supabase.from('cards').update({ next_review: nextReviewStr, easy_streak: 0 }).eq('id', activeCard.id);
+    let q = 4;
+    if (performance === 'hard') q = 2;
+    if (performance === 'medium') q = 4;
+    if (performance === 'easy') q = 5;
 
-    } else if (level === 'easy') {
-      const newStreak = (activeCard.easy_streak || 0) + 1;
-      if (newStreak >= 3) {
-        await supabase.from('mastered_words').insert([{ word: activeCard.word, translation: activeCard.translation, type: activeCard.type, context: activeCard.context, image_url: activeCard.image_url, lang: selectedLang }]);
-        await supabase.from('cards').delete().eq('id', activeCard.id);
+    easeFactor = easeFactor + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02));
+    if (easeFactor < 1.3) easeFactor = 1.3;
+
+    if (q < 3) {
+      repetitions = 0;
+      interval = 1;
+    } else {
+      if (repetitions === 0) {
+        interval = 1;
+      } else if (repetitions === 1) {
+        interval = 6;
       } else {
-        targetDate.setDate(targetDate.getDate() + 3);
-        const nextReviewStr = targetDate.toISOString().split('T')[0];
-        await supabase.from('cards').update({ next_review: nextReviewStr, easy_streak: newStreak }).eq('id', activeCard.id);
+        interval = Math.round(interval * easeFactor);
       }
+      repetitions++;
     }
+
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + interval);
+    const nextReviewStr = targetDate.toISOString().split('T')[0];
+
+    await supabase
+      .from('cards')
+      .update({ 
+        next_review: nextReviewStr, 
+        repetitions: repetitions,
+        interval: interval,
+        ease_factor: easeFactor
+      })
+      .eq('id', activeCard.id);
 
     resetVerification();
     await fetchScoresAndCards();
@@ -243,7 +262,18 @@ export default function App() {
     } else {
       await supabase
         .from('cards')
-        .insert([{ word: wordInput, translation: translationInput, type: typeInput, context: contextInput, image_url: imageUrlInput, lang: selectedLang }]);
+        .insert([{ 
+          word: wordInput, 
+          translation: translationInput, 
+          type: typeInput, 
+          context: contextInput, 
+          image_url: imageUrlInput, 
+          lang: selectedLang,
+          repetitions: 0,
+          interval: 0,
+          ease_factor: 2.5,
+          next_review: todayStr
+        }]);
       setCurrentPage(1);
     }
     setWordInput('');
@@ -274,15 +304,6 @@ export default function App() {
     if (currentPage > totalPagesAfterDelete && totalPagesAfterDelete > 0) {
       setCurrentPage(totalPagesAfterDelete);
     }
-  };
-
-  const handleDeleteMastered = async (e, id) => {
-    e.stopPropagation();
-    await supabase.from('mastered_words').delete().eq('id', id);
-    if (viewingMasteredItem && viewingMasteredItem.id === id) {
-      setViewingMasteredItem(null);
-    }
-    await fetchScoresAndCards();
   };
 
   const nextCard = () => {
@@ -416,9 +437,9 @@ export default function App() {
                         <span className="badge bg-white bg-opacity-25 text-white rounded-pill font-monospace">
                           {activeCard.type || 'n.'}
                         </span>
-                        {activeCard.easy_streak > 0 && (
-                          <span className="badge bg-warning text-dark rounded-pill small">
-                            <i className="bi bi-star-fill me-1"></i>Série : {activeCard.easy_streak}/3
+                        {activeCard.interval > 0 && (
+                          <span className="badge bg-dark bg-opacity-50 text-white rounded-pill small">
+                            <i className="bi bi-hourglass-split me-1"></i>Intervalle : {activeCard.interval}j
                           </span>
                         )}
                       </div>
@@ -490,13 +511,13 @@ export default function App() {
                     <div className="d-flex flex-wrap gap-2 align-items-center">
                       <div className="d-flex gap-2 flex-grow-1">
                         <button onClick={() => handleReviewScore('hard')} className="btn btn-danger flex-grow-1 py-2.5 rounded-3 fw-medium shadow-sm" disabled={!isCorrect}>
-                          Difficile <span className="d-block small opacity-75 fw-normal">(Demain)</span>
+                          Revoir <span className="d-block small opacity-75 fw-normal">(1 jour)</span>
                         </button>
                         <button onClick={() => handleReviewScore('medium')} className="btn btn-warning text-dark flex-grow-1 py-2.5 rounded-3 fw-medium shadow-sm" disabled={!isCorrect}>
-                          Moyen <span className="d-block small opacity-75 fw-normal">(2 jours)</span>
+                          Correct <span className="d-block small opacity-75 fw-normal">({activeCard.repetitions <= 1 ? '6 j.' : 'Étalé'})</span>
                         </button>
                         <button onClick={() => handleReviewScore('easy')} className="btn btn-success flex-grow-1 py-2.5 rounded-3 fw-medium shadow-sm" disabled={!isCorrect}>
-                          Facile <span className="d-block small opacity-75 fw-normal">(3 j. consécutifs)</span>
+                          Facile <span className="d-block small opacity-75 fw-normal">(Bonus intervalle)</span>
                         </button>
                       </div>
                       {reviewableCards.length > 1 && (
@@ -518,7 +539,7 @@ export default function App() {
             <div className="card shadow-sm border-0 rounded-4 sticky-top" style={{ top: '6rem' }}>
               <div className="card-body p-4">
                 <h2 className="h5 card-title mb-4 text-secondary d-flex align-items-center gap-2">
-                  <i className="bi bi-check-circle-fill text-success"></i> Maîtrisés ({masteredWords.length})
+                  <i className="bi bi-check-circle-fill text-success"></i> Long Terme ({masteredWords.length})
                 </h2>
                 <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 16rem)' }}>
                   <ul className="list-group list-group-flush gap-2">
@@ -536,20 +557,17 @@ export default function App() {
                           {item.image_url && <img src={item.image_url} alt="" className="rounded-2 border" style={{ width: '40px', height: '40px', objectFit: 'cover' }} />}
                           <div className="d-flex flex-column">
                             <span className="fw-medium text-success">{item.word}</span>
-                            <span className="small text-success opacity-75 font-monospace">{item.type || 'n.'}</span>
+                            <span className="small text-success opacity-75 font-monospace">{item.interval} jours</span>
                           </div>
                         </div>
                         <div className="d-flex align-items-center gap-2">
                           <button onClick={(e) => speakWord(item.word, e)} className="btn btn-sm btn-light rounded-circle text-success px-2 py-1 border-0"><i className="bi bi-volume-up-fill"></i></button>
                           <span className="badge bg-success rounded-pill px-2.5 py-1.5 small fw-semibold">Voir</span>
-                          <button onClick={(e) => handleDeleteMastered(e, item.id)} className="btn btn-sm btn-link text-danger p-0 border-0 lh-1">
-                            <i className="bi bi-x-circle-fill h5 mb-0"></i>
-                          </button>
                         </div>
                       </li>
                     ))}
                     {masteredWords.length === 0 && (
-                      <p className="text-center text-muted small py-4">Aucun mot maîtrisé pour l'instant.</p>
+                      <p className="text-center text-muted small py-4">Aucune carte acquise à long terme.</p>
                     )}
                   </ul>
                 </div>
@@ -601,7 +619,14 @@ export default function App() {
                   <div className="col-md-6">
                     <span className="d-block small text-muted fw-medium mb-2">Option B : Rechercher sur Pixabay</span>
                     <div className="input-group input-group-sm">
-                      <input type="text" placeholder="Terme en anglais (ex: dog, house...)" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="form-control border" />
+                      <input 
+                        type="text" 
+                        placeholder="Terme en anglais (ex: dog, house...)" 
+                        value={searchQuery} 
+                        onChange={(e) => setSearchQuery(e.target.value)} 
+                        onKeyDown={handlePixabayKeyDown}
+                        className="form-control border" 
+                      />
                       <button type="button" onClick={() => searchOnlineImages(searchQuery)} className="btn btn-outline-secondary">Rechercher</button>
                     </div>
                     {searchingImages && <div className="small text-muted mt-1">Recherche en cours...</div>}
@@ -648,7 +673,7 @@ export default function App() {
                     <th className="px-4 py-3">Mot ({currentLangConfig?.name})</th>
                     <th className="px-4 py-3">Nature</th>
                     <th className="px-4 py-3">Traduction (Fr)</th>
-                    <th className="px-4 py-3">Contexte / Exemple</th>
+                    <th className="px-4 py-3">Intervalle</th>
                     <th className="px-4 py-3 text-end">Actions</th>
                   </tr>
                 </thead>
@@ -670,7 +695,7 @@ export default function App() {
                         <span className="badge bg-light text-secondary border">{card.type || 'n.'}</span>
                       </td>
                       <td className="px-4 py-3 text-secondary">{card.translation}</td>
-                      <td className="px-4 py-3 small text-muted text-truncate" style={{ maxWidth: '240px' }}>{card.context || <span className="text-opacity-25 fst-italic">Aucun contexte</span>}</td>
+                      <td className="px-4 py-3 text-secondary small">{card.interval ?? 0} j.</td>
                       <td className="px-4 py-3 text-end">
                         <button onClick={() => handleEdit(card)} className="btn btn-sm btn-light text-primary me-2 rounded-2"><i className="bi bi-pencil"></i></button>
                         <button onClick={() => handleDelete(card.id)} className="btn btn-sm btn-light text-danger rounded-2"><i className="bi bi-trash"></i></button>
@@ -704,8 +729,11 @@ export default function App() {
                     </div>
                     <button onClick={() => speakWord(card.word)} className="btn btn-sm btn-light rounded-circle text-secondary"><i className="bi bi-volume-up-fill"></i></button>
                   </div>
-                  <div className="small mb-2">
+                  <div className="small mb-1">
                     <strong className="text-muted">Traduction :</strong> <span className="text-secondary">{card.translation}</span>
+                  </div>
+                  <div className="small mb-2">
+                    <strong className="text-muted">Intervalle :</strong> <span className="text-secondary">{card.interval ?? 0} jours</span>
                   </div>
                   {card.context && (
                     <div className="small text-muted bg-light p-2 rounded mb-2 fst-italic">
@@ -752,7 +780,7 @@ export default function App() {
             <div className="modal-content border-0 rounded-4 shadow-lg">
               <div className="modal-header border-0 bg-light rounded-top-4 py-3">
                 <h5 className="modal-title fw-bold text-dark d-flex align-items-center gap-2">
-                  <i className="bi bi-eye text-success"></i> Consultation Mot Acquis
+                  <i className="bi bi-eye text-success"></i> Consultation Carte Long Terme
                 </h5>
                 <button type="button" className="btn-close" onClick={() => setViewingMasteredItem(null)}></button>
               </div>
