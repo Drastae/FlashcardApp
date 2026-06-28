@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 // Initialisation du client Supabase
@@ -15,6 +15,16 @@ const LANGUAGES = [
 ];
 
 export default function App() {
+  // --- ÉTAT DU THÈME (DARK MODE) ---
+  const [darkMode, setDarkMode] = useState(() => {
+    return localStorage.getItem('fc_dark_mode') === 'true';
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-bs-theme', darkMode ? 'dark' : 'light');
+    localStorage.setItem('fc_dark_mode', darkMode);
+  }, [darkMode]);
+
   // --- ÉTAT DE LA LANGUE ---
   const [selectedLang, setSelectedLang] = useState(() => {
     return localStorage.getItem('fc_selected_lang') || null;
@@ -60,6 +70,7 @@ export default function App() {
   
   const [userAnswer, setUserAnswer] = useState('');
   const [isCorrect, setIsCorrect] = useState(false);
+  const [inputFeedback, setInputFeedback] = useState('neutral'); // neutral, partial-correct, incorrect
   const [triggerSuccessAnim, setTriggerSuccessAnim] = useState(false);
 
   // Formulaires & Médias
@@ -86,14 +97,12 @@ export default function App() {
   const currentLangConfig = LANGUAGES.find(l => l.id === selectedLang);
   const todayStr = new Date().toISOString().split('T')[0];
   
-  // Séparation ANKI : Cartes à réviser vs Cartes acquises à long terme (intervalle >= 21 jours)
   const reviewableCards = cards.filter(card => {
     if (!card.next_review) return true;
     return card.next_review <= todayStr;
   });
 
   const masteredWords = cards.filter(card => card.interval >= 21);
-
   const activeCard = reviewableCards[currentCardIndex];
   const firstLetterHint = activeCard && activeCard.word ? activeCard.word.trim().charAt(0).toUpperCase() : '';
 
@@ -127,11 +136,10 @@ export default function App() {
     }
   };
 
-  // --- INTERCEPTION TOUCHE ENTRÉE SUR LE CHAMP PIXABAY ---
   const handlePixabayKeyDown = (e) => {
     if (e.key === 'Enter') {
-      e.preventDefault(); // Empêche la soumission du formulaire global
-      searchOnlineImages(searchQuery); // Lance la recherche Pixabay
+      e.preventDefault();
+      searchOnlineImages(searchQuery);
     }
   };
 
@@ -166,21 +174,33 @@ export default function App() {
     }
   };
 
-  // --- VÉRIFICATION DE LA RÉPONSE ---
+  // --- VÉRIFICATION DE LA RÉPONSE & FEEDBACK MICRO-INTERACTIONS ---
   useEffect(() => {
     if (!activeCard) {
       setIsCorrect(false);
+      setInputFeedback('neutral');
       return;
     }
     const cleanUser = userAnswer.trim().toLowerCase();
     const cleanTarget = activeCard.word.trim().toLowerCase();
     
-    if (cleanUser === cleanTarget && cleanTarget.length > 0) {
+    if (cleanUser.length === 0) {
+      setInputFeedback('neutral');
+      setIsCorrect(false);
+      return;
+    }
+
+    if (cleanUser === cleanTarget) {
       setIsCorrect(true);
+      setInputFeedback('partial-correct');
       setTriggerSuccessAnim(true);
       const timer = setTimeout(() => setTriggerSuccessAnim(false), 600);
       return () => clearTimeout(timer);
+    } else if (cleanTarget.startsWith(cleanUser)) {
+      setInputFeedback('partial-correct');
+      setIsCorrect(false);
     } else {
+      setInputFeedback('incorrect');
       setIsCorrect(false);
     }
   }, [userAnswer, activeCard]);
@@ -188,6 +208,7 @@ export default function App() {
   const resetVerification = () => {
     setUserAnswer('');
     setIsCorrect(false);
+    setInputFeedback('neutral');
     setIsFlipped(false);
   };
 
@@ -324,9 +345,14 @@ export default function App() {
   // --- ÉCRAN 1 : CHOIX DE LA LANGUE ---
   if (!selectedLang) {
     return (
-      <div className="container py-5 min-h-screen d-flex flex-column justify-content-center align-items-center bg-light">
+      <div className="container py-5 min-h-screen d-flex flex-column justify-content-center align-items-center">
+        <div className="position-absolute top-0 end-0 m-3">
+          <button onClick={() => setDarkMode(!darkMode)} className="btn btn-outline-secondary rounded-circle px-2 py-1.5">
+            {darkMode ? <i className="bi bi-sun-fill"></i> : <i className="bi bi-moon-fill"></i>}
+          </button>
+        </div>
         <div className="text-center mb-5">
-          <h1 className="display-5 fw-extrabold text-dark mb-2">Vocabulaire & Flashcards</h1>
+          <h1 className="display-5 fw-extrabold mb-2">Vocabulaire & Flashcards</h1>
           <p className="text-muted fs-5">Choisissez la langue que vous souhaitez réviser ou enrichir aujourd'hui</p>
         </div>
         <div className="row g-4 w-100 max-w-md justify-content-center">
@@ -359,7 +385,8 @@ export default function App() {
 
   // --- ÉCRAN 2 : INTERFACE PRINCIPALE ---
   return (
-    <div className="container py-4">
+    <div className="container py-4 pb-5 mb-5 mb-md-0">
+      {/* Styles d'animation CSS 3D & Micro-interactions */}
       <style>{`
         @keyframes pulse-success {
           0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.7); }
@@ -367,13 +394,75 @@ export default function App() {
           100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(25, 135, 84, 0); }
         }
         .anim-success { animation: pulse-success 0.6s ease-out; }
+
+        /* PERSPECTIVE & CONTAINER FLIP 3D */
+        .flip-container {
+          perspective: 1000px;
+          width: 100%;
+          min-height: 340px;
+        }
+        .flip-card-inner {
+          position: relative;
+          width: 100%;
+          height: 100%;
+          text-align: center;
+          transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+          transform-style: preserve-3d;
+        }
+        .flip-container.flipped .flip-card-inner {
+          transform: rotateY(180deg);
+        }
+        .flip-card-front, .flip-card-back {
+          position: absolute;
+          width: 100%;
+          height: 100%;
+          min-height: 340px;
+          -webkit-backface-visibility: hidden;
+          backface-visibility: hidden;
+          border-radius: 1.5rem;
+          padding: 2rem;
+          display: flex;
+          flex-column;
+          justify-content: space-between;
+          align-items: center;
+          box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+        }
+        .flip-card-back {
+          transform: rotateY(180deg);
+        }
+
+        /* STICKY BOTTOM SUR MOBILE */
+        @media (max-width: 767.98px) {
+          .mobile-sticky-actions {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(var(--bs-body-bg-rgb), 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: 1rem;
+            box-shadow: 0 -0.5rem 1.5rem rgba(0,0,0,0.1);
+            z-index: 1030;
+          }
+        }
+
+        /* MICRO-INTERACTIONS BORDURES Saisie */
+        .feedback-neutral { border: 2px solid transparent !important; }
+        .feedback-partial-correct { border: 2px solid #198754 !important; box-shadow: 0 0 0 0.25rem rgba(25, 135, 84, 0.25) !important; }
+        .feedback-incorrect { border: 2px solid #dc3545 !important; box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.25) !important; }
       `}</style>
 
       {/* Navigation supérieure adaptative mobile */}
-      <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4 bg-white p-3 rounded-4 shadow-sm">
-        <div className="d-flex align-items-center gap-3">
-          <span className="badge bg-secondary bg-opacity-10 text-secondary fs-6 px-2.5 py-1.5 rounded-2 font-monospace fw-bold">{currentLangConfig?.flag}</span>
-          <h1 className="h4 mb-0 fw-bold text-dark">Espace {currentLangConfig?.name}</h1>
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4 bg-body-tertiary p-3 rounded-4 shadow-sm">
+        <div className="d-flex align-items-center justify-content-between w-100 w-md-auto">
+          <div className="d-flex align-items-center gap-3">
+            <span className="badge bg-secondary bg-opacity-10 text-secondary fs-6 px-2.5 py-1.5 rounded-2 font-monospace fw-bold">{currentLangConfig?.flag}</span>
+            <h1 className="h4 mb-0 fw-bold">Espace {currentLangConfig?.name}</h1>
+          </div>
+          <button onClick={() => setDarkMode(!darkMode)} className="btn btn-outline-secondary rounded-circle px-2 py-1.5 d-md-none ms-2">
+            {darkMode ? <i className="bi bi-sun-fill"></i> : <i className="bi bi-moon-fill"></i>}
+          </button>
         </div>
         
         <div className="btn-group w-100 w-md-auto shadow-sm" role="group">
@@ -393,9 +482,14 @@ export default function App() {
           </button>
         </div>
 
-        <button onClick={() => setSelectedLang(null)} className="btn btn-outline-secondary rounded-3 d-flex align-items-center justify-content-center gap-2 w-100 w-md-auto">
-          <i className="bi bi-arrow-left"></i> Changer de langue
-        </button>
+        <div className="d-flex gap-2 w-100 w-md-auto">
+          <button onClick={() => setSelectedLang(null)} className="btn btn-outline-secondary rounded-3 d-flex align-items-center justify-content-center gap-2 flex-grow-1">
+            <i className="bi bi-arrow-left"></i> Changer de langue
+          </button>
+          <button onClick={() => setDarkMode(!darkMode)} className="btn btn-outline-secondary rounded-circle px-2 py-1.5 d-none d-md-block">
+            {darkMode ? <i className="bi bi-sun-fill"></i> : <i className="bi bi-moon-fill"></i>}
+          </button>
+        </div>
       </div>
 
       {loading && (
@@ -418,83 +512,81 @@ export default function App() {
 
                 {reviewableCards.length > 0 ? (
                   <div>
-                    <div 
-                      onClick={() => isCorrect && setIsFlipped(!isFlipped)}
-                      className={`p-4 rounded-4 text-center text-white mb-4 d-flex flex-column justify-content-between align-items-center shadow-sm ${triggerSuccessAnim ? 'anim-success' : ''}`}
-                      style={{ 
-                        background: isCorrect 
-                          ? 'linear-gradient(135deg, #198754 0%, #157347 100%)' 
-                          : currentLangConfig?.gradient,
-                        minHeight: '340px',
-                        cursor: isCorrect ? 'pointer' : 'default',
-                        transition: 'background 0.4s ease'
-                      }}
-                    >
-                      <div className="d-flex align-items-center gap-2">
-                        <span className="text-uppercase tracking-wider small opacity-75 fw-bold">
-                          {isFlipped ? `Mot ${currentLangConfig?.name} & Contexte` : 'Mot Français'}
-                        </span>
-                        <span className="badge bg-white bg-opacity-25 text-white rounded-pill font-monospace">
-                          {activeCard.type || 'n.'}
-                        </span>
-                        {activeCard.interval > 0 && (
-                          <span className="badge bg-dark bg-opacity-50 text-white rounded-pill small">
-                            <i className="bi bi-hourglass-split me-1"></i>Intervalle : {activeCard.interval}j
-                          </span>
-                        )}
-                      </div>
-                      
-                      <div className="my-3 w-100">
-                        <div className="d-flex align-items-center justify-content-center gap-2">
-                          <p className="display-6 fw-bold mb-0">
-                            {isFlipped ? activeCard.word : activeCard.translation}
-                          </p>
-                          {isFlipped && (
-                            <button 
-                              onClick={(e) => speakWord(activeCard.word, e)} 
-                              className="btn btn-light btn-sm rounded-circle px-2.5 py-1.5 shadow-sm text-dark border-0 ms-2"
-                              title="Écouter la prononciation"
-                            >
-                              <i className="bi bi-volume-up-fill fs-5"></i>
-                            </button>
-                          )}
-                        </div>
+                    {/* CONTENEUR ANIMATION FLIP 3D */}
+                    <div className={`flip-container mb-4 ${isFlipped ? 'flipped' : ''}`}>
+                      <div className="flip-card-inner">
                         
-                        {isFlipped && (
-                          <div className="row justify-content-center align-items-center mt-3 g-3 max-w-lg mx-auto">
-                            {activeCard.image_url && (
-                              <div className="col-5">
-                                <img src={activeCard.image_url} alt="Indice visuel" className="img-fluid rounded-3 shadow-sm border border-white border-opacity-25" style={{ maxHeight: '110px', objectFit: 'cover', width: '100%' }} />
-                              </div>
+                        {/* RECTO : MOT FRANÇAIS */}
+                        <div 
+                          className={`flip-card-front text-white flex-column ${triggerSuccessAnim ? 'anim-success' : ''}`}
+                          style={{ background: currentLangConfig?.gradient }}
+                        >
+                          <div className="d-flex align-items-center justify-content-between w-100">
+                            <span className="text-uppercase tracking-wider small opacity-75 fw-bold">Mot Français</span>
+                            <span className="badge bg-white bg-opacity-25 text-white rounded-pill font-monospace">{activeCard.type || 'n.'}</span>
+                          </div>
+                          <div className="my-3 w-100 text-center">
+                            <p className="display-6 fw-bold mb-0">{activeCard.translation}</p>
+                          </div>
+                          <span className="badge bg-white bg-opacity-10 text-white rounded-pill px-3 py-2 small border-0 opacity-75">
+                            <i className="bi bi-lock-fill me-1"></i> Saisissez la traduction correcte
+                          </span>
+                        </div>
+
+                        {/* VERSO : MOT TRADUIT & DETAILS */}
+                        <div 
+                          onClick={() => isCorrect && setIsFlipped(!isFlipped)}
+                          className="flip-card-back text-white flex-column"
+                          style={{ background: 'linear-gradient(135deg, #198754 0%, #157347 100%)', cursor: 'pointer' }}
+                        >
+                          <div className="d-flex align-items-center justify-content-between w-100">
+                            <span className="text-uppercase tracking-wider small opacity-75 fw-bold">Traduction validée !</span>
+                            {activeCard.interval > 0 && (
+                              <span className="badge bg-dark bg-opacity-50 text-white rounded-pill small">
+                                <i className="bi bi-hourglass-split me-1"></i>Intervalle : {activeCard.interval}j
+                              </span>
                             )}
-                            <div className={activeCard.image_url ? "col-7 text-start" : "col-12"}>
-                              {activeCard.context ? (
-                                <div className="p-2.5 bg-white bg-opacity-10 rounded-3 border border-white border-opacity-10">
-                                  <p className="small mb-0.5 text-uppercase font-monospace text-white opacity-75" style={{ fontSize: '0.75rem' }}>Exemple :</p>
-                                  <p className="fst-italic mb-0 small">{activeCard.context}</p>
+                          </div>
+                          <div className="my-2 w-100 text-center">
+                            <div className="d-flex align-items-center justify-content-center gap-2">
+                              <p className="display-6 fw-bold mb-0">{activeCard.word}</p>
+                              <button 
+                                onClick={(e) => speakWord(activeCard.word, e)} 
+                                className="btn btn-light btn-sm rounded-circle px-2.5 py-1.5 shadow-sm text-dark border-0 ms-2"
+                              >
+                                <i className="bi bi-volume-up-fill fs-5"></i>
+                              </button>
+                            </div>
+                            
+                            <div className="row justify-content-center align-items-center mt-3 g-3 max-w-lg mx-auto">
+                              {activeCard.image_url && (
+                                <div className="col-5">
+                                  <img src={activeCard.image_url} alt="" className="img-fluid rounded-3 shadow-sm border border-white border-opacity-25" style={{ maxHeight: '90px', objectFit: 'cover', width: '100%' }} />
                                 </div>
-                              ) : (
-                                <p className="small text-white opacity-50 mb-0 fst-italic">Aucun contexte configuré.</p>
                               )}
+                              <div className={activeCard.image_url ? "col-7 text-start" : "col-12"}>
+                                {activeCard.context ? (
+                                  <div className="p-2 bg-white bg-opacity-10 rounded-3 border border-white border-opacity-10">
+                                    <p className="fst-italic mb-0 small" style={{ fontSize: '0.85rem' }}>{activeCard.context}</p>
+                                  </div>
+                                ) : (
+                                  <p className="small text-white opacity-50 mb-0 fst-italic">Aucun contexte configuré.</p>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        )}
-                      </div>
+                          <span className="badge bg-white text-success rounded-pill px-3 py-2 btn btn-sm border-0 shadow-sm fw-bold">
+                            <i className="bi bi-arrow-clockwise me-1"></i> Cliquer pour masquer
+                          </span>
+                        </div>
 
-                      {isCorrect ? (
-                        <span className="badge bg-white text-success rounded-pill px-3 py-2 btn btn-sm border-0 shadow-sm fw-bold">
-                          <i className="bi bi-arrow-clockwise me-1"></i> Cliquer pour retourner la carte
-                        </span>
-                      ) : (
-                        <span className="badge bg-white bg-opacity-10 text-white rounded-pill px-3 py-2 small border-0 opacity-75">
-                          <i className="bi bi-lock-fill me-1"></i> Saisissez la traduction correcte
-                        </span>
-                      )}
+                      </div>
                     </div>
 
+                    {/* CHAMP DE SAISIE AVEC MICRO-INTERACTIONS FLUIDES */}
                     <div className="mb-4">
                       <div className="input-group input-group-lg shadow-sm rounded-3 overflow-hidden">
-                        <span className={`input-group-text border-0 text-white transition-colors ${isCorrect ? 'bg-success' : 'bg-secondary bg-opacity-25 text-dark'}`}>
+                        <span className={`input-group-text border-0 text-white transition-colors ${isCorrect ? 'bg-success' : 'bg-secondary bg-opacity-25 text-body'}`}>
                           {isCorrect ? <i className="bi bi-check-lg"></i> : <i className="bi bi-pencil-square"></i>}
                         </span>
                         <input 
@@ -502,31 +594,37 @@ export default function App() {
                           placeholder={isCorrect ? "Trouvé !" : `Commence par : "${firstLetterHint}"...`}
                           value={userAnswer}
                           onChange={(e) => setUserAnswer(e.target.value)}
-                          className={`form-control border-0 bg-light ${isCorrect ? 'fw-bold text-success' : ''}`}
+                          className={`form-control bg-body-tertiary transition-all ${isCorrect ? 'fw-bold text-success' : ''} ${
+                            inputFeedback === 'partial-correct' ? 'feedback-partial-correct' : 
+                            inputFeedback === 'incorrect' ? 'feedback-incorrect' : 'feedback-neutral'
+                          }`}
                           disabled={isCorrect && isFlipped}
                         />
                       </div>
                     </div>
 
-                    <div className="d-flex flex-wrap gap-2 align-items-center">
-                      <div className="d-flex gap-2 flex-grow-1">
-                        <button onClick={() => handleReviewScore('hard')} className="btn btn-danger flex-grow-1 py-2.5 rounded-3 fw-medium shadow-sm" disabled={!isCorrect}>
-                          Revoir <span className="d-block small opacity-75 fw-normal">(1 jour)</span>
-                        </button>
-                        <button onClick={() => handleReviewScore('medium')} className="btn btn-warning text-dark flex-grow-1 py-2.5 rounded-3 fw-medium shadow-sm" disabled={!isCorrect}>
-                          Correct <span className="d-block small opacity-75 fw-normal">({activeCard.repetitions <= 1 ? '6 j.' : 'Étalé'})</span>
-                        </button>
-                        <button onClick={() => handleReviewScore('easy')} className="btn btn-success flex-grow-1 py-2.5 rounded-3 fw-medium shadow-sm" disabled={!isCorrect}>
-                          Facile <span className="d-block small opacity-75 fw-normal">(Bonus intervalle)</span>
-                        </button>
+                    {/* COMPORTEMENT DES BOUTONS ET CONTRAINTE STICKY MOBILE */}
+                    <div className="mobile-sticky-actions">
+                      <div className="d-flex flex-wrap gap-2 align-items-center max-w-lg mx-auto">
+                        <div className="d-flex gap-2 flex-grow-1">
+                          <button onClick={() => handleReviewScore('hard')} className="btn btn-danger flex-grow-1 py-2.5 rounded-3 fw-medium shadow-sm" disabled={!isCorrect}>
+                            Revoir <span className="d-block small opacity-75 fw-normal">(1 jour)</span>
+                          </button>
+                          <button onClick={() => handleReviewScore('medium')} className="btn btn-warning text-dark flex-grow-1 py-2.5 rounded-3 fw-medium shadow-sm" disabled={!isCorrect}>
+                            Correct <span className="d-block small opacity-75 fw-normal">({activeCard.repetitions <= 1 ? '6 j.' : 'Étalé'})</span>
+                          </button>
+                          <button onClick={() => handleReviewScore('easy')} className="btn btn-success flex-grow-1 py-2.5 rounded-3 fw-medium shadow-sm" disabled={!isCorrect}>
+                            Facile <span className="d-block small opacity-75 fw-normal">(Bonus)</span>
+                          </button>
+                        </div>
+                        {reviewableCards.length > 1 && (
+                          <button onClick={nextCard} className="btn btn-outline-secondary px-4 py-2.5 rounded-3 w-100 w-sm-auto">Passer</button>
+                        )}
                       </div>
-                      {reviewableCards.length > 1 && (
-                        <button onClick={nextCard} className="btn btn-outline-secondary px-4 py-3 rounded-3 w-100 w-sm-auto">Passer</button>
-                      )}
                     </div>
                   </div>
                 ) : (
-                  <div className="py-5 text-center border rounded-4 border-dashed bg-light text-muted">
+                  <div className="py-5 text-center border rounded-4 border-dashed bg-body-tertiary text-muted">
                     <p className="fw-medium mb-1"><i className="bi bi-calendar-check text-success h4 d-block mb-2"></i>Tout est à jour pour cette langue !</p>
                     <p className="small mb-0">Revenez demain ou ajoutez de nouveaux termes dans l'onglet de gestion.</p>
                   </div>
@@ -586,15 +684,15 @@ export default function App() {
             <form onSubmit={handleAddOrUpdate} className="row g-3 mb-4">
               <div className="col-md-5">
                 <label className="form-label small text-muted fw-bold">Mot traduit ({currentLangConfig?.name})</label>
-                <input type="text" placeholder="ex: Scarcity" value={wordInput} onChange={(e) => setWordInput(e.target.value)} className="form-control py-2.5 bg-light border-0 rounded-3" />
+                <input type="text" placeholder="ex: Scarcity" value={wordInput} onChange={(e) => setWordInput(e.target.value)} className="form-control py-2.5 bg-body-tertiary border-0 rounded-3" />
               </div>
               <div className="col-md-5">
                 <label className="form-label small text-muted fw-bold">Traduction (Français)</label>
-                <input type="text" placeholder="ex: Rareté" value={translationInput} onChange={(e) => setTranslationInput(e.target.value)} className="form-control py-2.5 bg-light border-0 rounded-3" />
+                <input type="text" placeholder="ex: Rareté" value={translationInput} onChange={(e) => setTranslationInput(e.target.value)} className="form-control py-2.5 bg-body-tertiary border-0 rounded-3" />
               </div>
               <div className="col-md-2">
                 <label className="form-label small text-muted fw-bold">Nature</label>
-                <select value={typeInput} onChange={(e) => setTypeInput(e.target.value)} className="form-select py-2.5 bg-light border-0 rounded-3 text-secondary fw-medium">
+                <select value={typeInput} onChange={(e) => setTypeInput(e.target.value)} className="form-select py-2.5 bg-body-tertiary border-0 rounded-3 text-secondary fw-medium">
                   <option value="n.">Nom (n.)</option>
                   <option value="v.">Verbe (v.)</option>
                   <option value="adj.">Adjectif (adj.)</option>
@@ -604,16 +702,16 @@ export default function App() {
               </div>
               <div className="col-12">
                 <label className="form-label small text-muted fw-bold">Exemple ou contexte d'utilisation</label>
-                <textarea rows="2" placeholder="Saisissez une phrase d'exemple..." value={contextInput} onChange={(e) => setContextInput(e.target.value)} className="form-control bg-light border-0 rounded-3"></textarea>
+                <textarea rows="2" placeholder="Saisissez une phrase d'exemple..." value={contextInput} onChange={(e) => setContextInput(e.target.value)} className="form-control bg-body-tertiary border-0 rounded-3"></textarea>
               </div>
 
               {/* MODULE DES IMAGES */}
-              <div className="col-12 border rounded-3 p-3 bg-light bg-opacity-50">
+              <div className="col-12 border rounded-3 p-3 bg-body-tertiary bg-opacity-50">
                 <label className="form-label small text-secondary fw-bold mb-3 d-block"><i className="bi bi-image me-2"></i>Illustration de la carte (Optionnel)</label>
                 <div className="row g-3">
                   <div className="col-md-6 border-end">
                     <span className="d-block small text-muted fw-medium mb-2">Option A : Importer depuis votre PC</span>
-                    <input type="file" accept="image/*" onChange={handleLocalFileUpload} className="form-control btn-sm bg-white" />
+                    <input type="file" accept="image/*" onChange={handleLocalFileUpload} className="form-control btn-sm bg-body" />
                     {uploading && <div className="small text-primary mt-1"><span className="spinner-border spinner-border-sm me-1"></span>Upload en cours...</div>}
                   </div>
                   <div className="col-md-6">
@@ -625,7 +723,7 @@ export default function App() {
                         value={searchQuery} 
                         onChange={(e) => setSearchQuery(e.target.value)} 
                         onKeyDown={handlePixabayKeyDown}
-                        className="form-control border" 
+                        className="form-control border bg-body" 
                       />
                       <button type="button" onClick={() => searchOnlineImages(searchQuery)} className="btn btn-outline-secondary">Rechercher</button>
                     </div>
@@ -647,7 +745,7 @@ export default function App() {
                 )}
 
                 {imageUrlInput && (
-                  <div className="mt-3 p-2 bg-white rounded border d-flex align-items-center justify-content-between">
+                  <div className="mt-3 p-2 bg-body rounded border d-flex align-items-center justify-content-between">
                     <div className="d-flex align-items-center gap-2 overflow-hidden">
                       <img src={imageUrlInput} alt="Sélection" className="rounded border" style={{ width: '45px', height: '45px', objectFit: 'cover' }} />
                       <span className="small text-success text-truncate fw-medium">Image liée avec succès</span>
@@ -682,17 +780,17 @@ export default function App() {
                     <tr key={card.id}>
                       <td className="px-4 py-3">
                         {card.image_url ? (
-                          <img src={card.image_url} alt="" className="rounded border bg-light" style={{ width: '40px', height: '40px', objectFit: 'cover' }} />
+                          <img src={card.image_url} alt="" className="rounded border bg-body-tertiary" style={{ width: '40px', height: '40px', objectFit: 'cover' }} />
                         ) : (
-                          <div className="bg-light text-muted d-flex align-items-center justify-content-center rounded border" style={{ width: '40px', height: '40px', fontSize: '0.8rem' }}><i className="bi bi-image"></i></div>
+                          <div className="bg-body-tertiary text-muted d-flex align-items-center justify-content-center rounded border" style={{ width: '40px', height: '40px', fontSize: '0.8rem' }}><i className="bi bi-image"></i></div>
                         )}
                       </td>
-                      <td className="px-4 py-3 fw-medium text-dark">
+                      <td className="px-4 py-3 fw-medium">
                         <button onClick={() => speakWord(card.word)} className="btn btn-sm btn-link p-0 me-2 text-secondary" title="Écouter"><i className="bi bi-volume-up-fill"></i></button>
                         {card.word}
                       </td>
                       <td className="px-4 py-3 font-monospace">
-                        <span className="badge bg-light text-secondary border">{card.type || 'n.'}</span>
+                        <span className="badge bg-body-tertiary text-secondary border">{card.type || 'n.'}</span>
                       </td>
                       <td className="px-4 py-3 text-secondary">{card.translation}</td>
                       <td className="px-4 py-3 text-secondary small">{card.interval ?? 0} j.</td>
@@ -711,20 +809,20 @@ export default function App() {
               </table>
             </div>
 
-            {/* VUE LISTE DE CARTES : UNIQUE MOBILE */}
+            {/* VUE LISTE DE CARTES : MOBILE (MOBILE FIRST) */}
             <div className="d-block d-md-none mb-3">
               {currentCards.map((card) => (
-                <div key={card.id} className="card p-3 mb-2 border rounded-3 bg-white shadow-sm">
+                <div key={card.id} className="card p-3 mb-2 border rounded-3 bg-body shadow-sm">
                   <div className="d-flex align-items-center justify-content-between mb-2">
                     <div className="d-flex align-items-center gap-2">
                       {card.image_url ? (
-                        <img src={card.image_url} alt="" className="rounded border bg-light" style={{ width: '35px', height: '35px', objectFit: 'cover' }} />
+                        <img src={card.image_url} alt="" className="rounded border bg-body-tertiary" style={{ width: '35px', height: '35px', objectFit: 'cover' }} />
                       ) : (
-                        <div className="bg-light text-muted d-flex align-items-center justify-content-center rounded border" style={{ width: '35px', height: '35px', fontSize: '0.75rem' }}><i className="bi bi-image"></i></div>
+                        <div className="bg-body-tertiary text-muted d-flex align-items-center justify-content-center rounded border" style={{ width: '35px', height: '35px', fontSize: '0.75rem' }}><i className="bi bi-image"></i></div>
                       )}
                       <div>
-                        <span className="fw-bold text-dark">{card.word}</span>
-                        <span className="badge bg-light text-secondary border font-monospace ms-2" style={{ fontSize: '0.7rem' }}>{card.type || 'n.'}</span>
+                        <span className="fw-bold">{card.word}</span>
+                        <span className="badge bg-body-tertiary text-secondary border font-monospace ms-2" style={{ fontSize: '0.7rem' }}>{card.type || 'n.'}</span>
                       </div>
                     </div>
                     <button onClick={() => speakWord(card.word)} className="btn btn-sm btn-light rounded-circle text-secondary"><i className="bi bi-volume-up-fill"></i></button>
@@ -736,7 +834,7 @@ export default function App() {
                     <strong className="text-muted">Intervalle :</strong> <span className="text-secondary">{card.interval ?? 0} jours</span>
                   </div>
                   {card.context && (
-                    <div className="small text-muted bg-light p-2 rounded mb-2 fst-italic">
+                    <div className="small text-muted bg-body-tertiary p-2 rounded mb-2 fst-italic">
                       "{card.context}"
                     </div>
                   )}
@@ -747,7 +845,7 @@ export default function App() {
                 </div>
               ))}
               {cards.length === 0 && (
-                <div className="text-center py-4 text-muted small border rounded-3 bg-white">Aucun mot enregistré dans cette langue.</div>
+                <div className="text-center py-4 text-muted small border rounded-3 bg-body">Aucun mot enregistré dans cette langue.</div>
               )}
             </div>
 
@@ -778,8 +876,8 @@ export default function App() {
         <div className="modal fade show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setViewingMasteredItem(null)}>
           <div className="modal-dialog modal-dialog-centered mx-3 mx-sm-auto" onClick={(e) => e.stopPropagation()}>
             <div className="modal-content border-0 rounded-4 shadow-lg">
-              <div className="modal-header border-0 bg-light rounded-top-4 py-3">
-                <h5 className="modal-title fw-bold text-dark d-flex align-items-center gap-2">
+              <div className="modal-header border-0 bg-body-tertiary rounded-top-4 py-3">
+                <h5 className="modal-title fw-bold d-flex align-items-center gap-2">
                   <i className="bi bi-eye text-success"></i> Consultation Carte Long Terme
                 </h5>
                 <button type="button" className="btn-close" onClick={() => setViewingMasteredItem(null)}></button>
@@ -820,7 +918,6 @@ export default function App() {
                       )}
                     </div>
 
-                    {/* Affichage image et métadonnées au verso de la modale */}
                     {isMasteredFlipped && (
                       <div className="row justify-content-center align-items-center g-2 max-w-sm mx-auto mt-2">
                         {viewingMasteredItem.image_url && (
@@ -840,7 +937,7 @@ export default function App() {
                   </span>
                 </div>
               </div>
-              <div className="modal-footer border-0 bg-light rounded-bottom-4 py-2">
+              <div className="modal-footer border-0 bg-body-tertiary rounded-bottom-4 py-2">
                 <button type="button" className="btn btn-secondary px-4 rounded-3" onClick={() => setViewingMasteredItem(null)}>Fermer</button>
               </div>
             </div>
