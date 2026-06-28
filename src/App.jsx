@@ -1,6 +1,3 @@
-Voici le code complet de votre application React intégrant l'ensemble des corrections d'affichage pour mobile, notamment au niveau de l'en-tête adaptative et de la bascule entre vue tableau (PC) et vue cartes (Mobile).
-
-```jsx
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -339,7 +336,6 @@ export default function App() {
     );
   }
 
-  // --- ÉCRAN 2 : INTERFACE PRINCIPALE ---
   return (
     <div className="container py-4">
       <style>{`
@@ -562,7 +558,6 @@ export default function App() {
         </div>
       )}
 
-      {/* VUE 2 : GESTION DU VOCABULAIRE */}
       {activeTab === 'manage' && (
         <div className="card shadow-sm border-0 rounded-4">
           <div className="card-body p-4">
@@ -825,6 +820,4 @@ export default function App() {
 
     </div>
   );
-}
 
-```
