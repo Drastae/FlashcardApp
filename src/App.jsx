@@ -1,4 +1,7 @@
-import React, { useState, useEffect } from 'react';
+Voici le code complet de votre application React intégrant l'ensemble des corrections d'affichage pour mobile, notamment au niveau de l'en-tête adaptative et de la bascule entre vue tableau (PC) et vue cartes (Mobile).
+
+```jsx
+import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 // Initialisation du client Supabase
@@ -348,31 +351,31 @@ export default function App() {
         .anim-success { animation: pulse-success 0.6s ease-out; }
       `}</style>
 
-      {/* Navigation supérieure */}
-      <div className="d-flex justify-content-between align-items-center mb-4 bg-white p-3 rounded-4 shadow-sm">
+      {/* Navigation supérieure adaptative mobile */}
+      <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4 bg-white p-3 rounded-4 shadow-sm">
         <div className="d-flex align-items-center gap-3">
           <span className="badge bg-secondary bg-opacity-10 text-secondary fs-6 px-2.5 py-1.5 rounded-2 font-monospace fw-bold">{currentLangConfig?.flag}</span>
           <h1 className="h4 mb-0 fw-bold text-dark">Espace {currentLangConfig?.name}</h1>
         </div>
         
-        <div className="btn-group shadow-sm" role="group">
+        <div className="btn-group w-100 w-md-auto shadow-sm" role="group">
           <button 
             type="button" 
-            className={`btn px-4 ${activeTab === 'review' ? 'btn-primary' : 'btn-light'}`}
+            className={`btn px-3 px-sm-4 ${activeTab === 'review' ? 'btn-primary' : 'btn-light'}`}
             onClick={() => setActiveTab('review')}
           >
-            <i className="bi bi-play-circle me-2"></i>Mode Révision
+            <i className="bi bi-play-circle me-2"></i><span className="d-none d-sm-inline">Mode </span>Révision
           </button>
           <button 
             type="button" 
-            className={`btn px-4 ${activeTab === 'manage' ? 'btn-primary' : 'btn-light'}`}
+            className={`btn px-3 px-sm-4 ${activeTab === 'manage' ? 'btn-primary' : 'btn-light'}`}
             onClick={() => setActiveTab('manage')}
           >
-            <i className="bi bi-gear-fill me-2"></i>Gestion Vocabulaire
+            <i className="bi bi-gear-fill me-2"></i>Gestion<span className="d-none d-sm-inline"> Vocabulaire</span>
           </button>
         </div>
 
-        <button onClick={() => setSelectedLang(null)} className="btn btn-outline-secondary rounded-3 d-flex align-items-center gap-2">
+        <button onClick={() => setSelectedLang(null)} className="btn btn-outline-secondary rounded-3 d-flex align-items-center justify-content-center gap-2 w-100 w-md-auto">
           <i className="bi bi-arrow-left"></i> Changer de langue
         </button>
       </div>
@@ -500,7 +503,7 @@ export default function App() {
                         </button>
                       </div>
                       {reviewableCards.length > 1 && (
-                        <button onClick={nextCard} className="btn btn-outline-secondary px-4 py-3 rounded-3">Passer</button>
+                        <button onClick={nextCard} className="btn btn-outline-secondary px-4 py-3 rounded-3 w-100 w-sm-auto">Passer</button>
                       )}
                     </div>
                   </div>
@@ -633,13 +636,14 @@ export default function App() {
               </div>
 
               <div className="col-12 d-flex justify-content-end">
-                <button type="submit" className="btn btn-primary px-5 py-2.5 rounded-3 shadow-sm" disabled={uploading}>
+                <button type="submit" className="btn btn-primary px-5 py-2.5 rounded-3 shadow-sm w-100 w-sm-auto" disabled={uploading}>
                   {editingId ? 'Mettre à jour le mot' : 'Ajouter aux révisions'}
                 </button>
               </div>
             </form>
 
-            <div className="table-responsive border rounded-3 mb-3">
+            {/* VUE TABLEAU : PC / TABLETTE */}
+            <div className="table-responsive border rounded-3 mb-3 d-none d-md-block">
               <table className="table table-hover align-middle mb-0">
                 <thead className="table-light text-uppercase small text-muted">
                   <tr>
@@ -685,8 +689,45 @@ export default function App() {
               </table>
             </div>
 
+            {/* VUE LISTE DE CARTES : UNIQUE MOBILE */}
+            <div className="d-block d-md-none mb-3">
+              {currentCards.map((card) => (
+                <div key={card.id} className="card p-3 mb-2 border rounded-3 bg-white shadow-sm">
+                  <div className="d-flex align-items-center justify-content-between mb-2">
+                    <div className="d-flex align-items-center gap-2">
+                      {card.image_url ? (
+                        <img src={card.image_url} alt="" className="rounded border bg-light" style={{ width: '35px', height: '35px', objectFit: 'cover' }} />
+                      ) : (
+                        <div className="bg-light text-muted d-flex align-items-center justify-content-center rounded border" style={{ width: '35px', height: '35px', fontSize: '0.75rem' }}><i className="bi bi-image"></i></div>
+                      )}
+                      <div>
+                        <span className="fw-bold text-dark">{card.word}</span>
+                        <span className="badge bg-light text-secondary border font-monospace ms-2" style={{ fontSize: '0.7rem' }}>{card.type || 'n.'}</span>
+                      </div>
+                    </div>
+                    <button onClick={() => speakWord(card.word)} className="btn btn-sm btn-light rounded-circle text-secondary"><i className="bi bi-volume-up-fill"></i></button>
+                  </div>
+                  <div className="small mb-2">
+                    <strong className="text-muted">Traduction :</strong> <span className="text-secondary">{card.translation}</span>
+                  </div>
+                  {card.context && (
+                    <div className="small text-muted bg-light p-2 rounded mb-2 fst-italic">
+                      "{card.context}"
+                    </div>
+                  )}
+                  <div className="d-flex justify-content-end gap-2 border-top pt-2">
+                    <button onClick={() => handleEdit(card)} className="btn btn-sm btn-outline-primary px-3 rounded-2"><i className="bi bi-pencil me-1"></i> Modifier</button>
+                    <button onClick={() => handleDelete(card.id)} className="btn btn-sm btn-outline-danger px-3 rounded-2"><i className="bi bi-trash me-1"></i> Supprimer</button>
+                  </div>
+                </div>
+              ))}
+              {cards.length === 0 && (
+                <div className="text-center py-4 text-muted small border rounded-3 bg-white">Aucun mot enregistré dans cette langue.</div>
+              )}
+            </div>
+
             {totalPages > 1 && (
-              <nav className="d-flex justify-content-between align-items-center px-1">
+              <nav className="d-flex flex-column flex-sm-row justify-content-between align-items-center gap-2 px-1">
                 <span className="small text-muted">Affichage de {indexOfFirstItem + 1} à {Math.min(indexOfLastItem, cards.length)} sur {cards.length} mots</span>
                 <ul className="pagination pagination-sm mb-0">
                   <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
@@ -710,7 +751,7 @@ export default function App() {
       {/* MODALE DE CONSULTATION MOTS ACQUIS */}
       {viewingMasteredItem && (
         <div className="modal fade show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }} onClick={() => setViewingMasteredItem(null)}>
-          <div className="modal-dialog modal-dialog-centered" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-dialog modal-dialog-centered mx-3 mx-sm-auto" onClick={(e) => e.stopPropagation()}>
             <div className="modal-content border-0 rounded-4 shadow-lg">
               <div className="modal-header border-0 bg-light rounded-top-4 py-3">
                 <h5 className="modal-title fw-bold text-dark d-flex align-items-center gap-2">
@@ -785,3 +826,5 @@ export default function App() {
     </div>
   );
 }
+
+```
