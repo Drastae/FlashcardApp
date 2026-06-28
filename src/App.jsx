@@ -193,6 +193,7 @@ export default function App() {
     if (cleanUser === cleanTarget) {
       setIsCorrect(true);
       setInputFeedback('partial-correct');
+      setIsFlipped(true); // Inverse automatiquement la carte vers le verso dès que le mot est juste
       setTriggerSuccessAnim(true);
       const timer = setTimeout(() => setTriggerSuccessAnim(false), 600);
       return () => clearTimeout(timer);
@@ -246,6 +247,7 @@ export default function App() {
     targetDate.setDate(targetDate.getDate() + interval);
     const nextReviewStr = targetDate.toISOString().split('T')[0];
 
+    // 1. Envoyer la mise à jour à Supabase
     await supabase
       .from('cards')
       .update({ 
@@ -256,9 +258,12 @@ export default function App() {
       })
       .eq('id', activeCard.id);
 
-    resetVerification();
-    await fetchScoresAndCards();
-    adjustActiveIndexAfterRemoval(reviewableCards.length - 1);
+    // 2. Laisser un délai visuel pour que l'utilisateur lise la carte retournée avant de passer à la suite
+    setTimeout(async () => {
+      resetVerification();
+      await fetchScoresAndCards();
+      adjustActiveIndexAfterRemoval(reviewableCards.length - 1);
+    }, 1200); // 1.2 seconde d'affichage du verso avant de charger la carte suivante
   };
 
   const adjustActiveIndexAfterRemoval = (remainingCount) => {
@@ -385,7 +390,7 @@ export default function App() {
 
   // --- ÉCRAN 2 : INTERFACE PRINCIPALE ---
   return (
-    <div className="container py-4 pb-5 mb-5 mb-md-0">
+    <div className="container py-4">
       {/* Styles d'animation CSS 3D & Micro-interactions */}
       <style>{`
         @keyframes pulse-success {
@@ -422,7 +427,7 @@ export default function App() {
           border-radius: 1.5rem;
           padding: 2rem;
           display: flex;
-          flex-column;
+          flex-direction: column;
           justify-content: space-between;
           align-items: center;
           box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
@@ -444,6 +449,9 @@ export default function App() {
             padding: 1rem;
             box-shadow: 0 -0.5rem 1.5rem rgba(0,0,0,0.1);
             z-index: 1030;
+          }
+          body {
+            padding-bottom: 80px; /* Évite la superposition des boutons fixes avec le contenu */
           }
         }
 
@@ -535,9 +543,8 @@ export default function App() {
 
                         {/* VERSO : MOT TRADUIT & DETAILS */}
                         <div 
-                          onClick={() => isCorrect && setIsFlipped(!isFlipped)}
                           className="flip-card-back text-white flex-column"
-                          style={{ background: 'linear-gradient(135deg, #198754 0%, #157347 100%)', cursor: 'pointer' }}
+                          style={{ background: 'linear-gradient(135deg, #198754 0%, #157347 100%)' }}
                         >
                           <div className="d-flex align-items-center justify-content-between w-100">
                             <span className="text-uppercase tracking-wider small opacity-75 fw-bold">Traduction validée !</span>
@@ -575,8 +582,8 @@ export default function App() {
                               </div>
                             </div>
                           </div>
-                          <span className="badge bg-white text-success rounded-pill px-3 py-2 btn btn-sm border-0 shadow-sm fw-bold">
-                            <i className="bi bi-arrow-clockwise me-1"></i> Cliquer pour masquer
+                          <span className="badge bg-white text-success rounded-pill px-3 py-2 small border-0 shadow-sm fw-bold">
+                            <i className="bi bi-check-circle-fill me-1"></i> Traitement en cours...
                           </span>
                         </div>
 
@@ -598,7 +605,7 @@ export default function App() {
                             inputFeedback === 'partial-correct' ? 'feedback-partial-correct' : 
                             inputFeedback === 'incorrect' ? 'feedback-incorrect' : 'feedback-neutral'
                           }`}
-                          disabled={isCorrect && isFlipped}
+                          disabled={isCorrect}
                         />
                       </div>
                     </div>
@@ -834,7 +841,7 @@ export default function App() {
                     <strong className="text-muted">Intervalle :</strong> <span className="text-secondary">{card.interval ?? 0} jours</span>
                   </div>
                   {card.context && (
-                    <div className="small text-muted bg-body-tertiary p-2 rounded mb-2 fst-italic">
+                    <div className="small text-muted bg-light p-2 rounded mb-2 fst-italic">
                       "{card.context}"
                     </div>
                   )}
@@ -918,6 +925,7 @@ export default function App() {
                       )}
                     </div>
 
+                    {/* Affichage image et métadonnées au verso de la modale */}
                     {isMasteredFlipped && (
                       <div className="row justify-content-center align-items-center g-2 max-w-sm mx-auto mt-2">
                         {viewingMasteredItem.image_url && (
