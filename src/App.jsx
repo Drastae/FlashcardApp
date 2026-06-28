@@ -589,7 +589,6 @@ export default function App() {
                 <input type="text" className="form-control" placeholder="es-ES" value={langLocaleInput} onChange={(e) => setLangLocaleInput(e.target.value)} />
               </div>
               
-              {/* Amélioration explicite des champs couleurs */}
               <div className="col-6">
                 <label className="form-label small fw-bold text-truncate d-block">Couleur Gauche (Dégradé)</label>
                 <div className="input-group">
@@ -633,10 +632,12 @@ export default function App() {
               >
                 <div className="d-flex align-items-center justify-content-between z-1">
                   <div className="d-flex align-items-center gap-3">
-                    <span className="badge bg-white bg-opacity-25 fs-4 px-2.5 py-1.5 rounded-3 font-monospace fw-bold">{lang.flag}</span>
+                    {/* Remplacement du conteneur par une gestion en taille émoji */}
+                    <span className="fs-3 px-2 py-1 rounded-3 bg-white bg-opacity-10">{lang.flag.length > 2 ? lang.flag : '🌐'}</span>
                     <span className="fs-4 fw-bold">{lang.name}</span>
                   </div>
                   <div className="d-flex align-items-center gap-2">
+                    {/* Amélioration du bouton blanc opaque en un bouton translucide avec icône explicite */}
                     <button 
                       onClick={(e) => {
                         e.stopPropagation();
@@ -648,14 +649,16 @@ export default function App() {
                         setLangColorEnd(lang.color_end);
                         setShowLangForm(true);
                       }}
-                      className="btn btn-sm btn-light bg-opacity-25 border-0 text-white"
+                      className="btn btn-sm btn-light bg-opacity-25 border-0 text-white d-flex align-items-center justify-content-center p-2 rounded-3"
+                      style={{ width: '34px', height: '34px' }}
                       title="Modifier les couleurs"
                     >
                       <i className="bi bi-palette-fill"></i>
                     </button>
                     <button 
                       onClick={(e) => handleDeleteLanguage(e, lang.id)} 
-                      className="btn btn-sm btn-danger bg-opacity-75 border-0 text-white"
+                      className="btn btn-sm btn-danger bg-opacity-75 border-0 text-white d-flex align-items-center justify-content-center p-2 rounded-3"
+                      style={{ width: '34px', height: '34px' }}
                       title="Supprimer la liste"
                     >
                       <i className="bi bi-trash-fill"></i>
@@ -674,6 +677,7 @@ export default function App() {
   // --- ÉCRAN 2 : INTERFACE PRINCIPALE ---
   return (
     <div className="container py-4">
+      {/* Styles d'animation CSS 3D & Micro-interactions */}
       <style>{`
         @keyframes pulse-success {
           0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(25, 135, 84, 0.7); }
@@ -743,7 +747,7 @@ export default function App() {
         <div className="d-flex align-items-center justify-content-between w-100 w-md-auto">
           <div className="d-flex align-items-center gap-2">
             {renderMiniPandaLogo()}
-            <span className="badge bg-secondary bg-opacity-10 text-secondary fs-5 px-2.5 py-1.5 rounded-2 font-monospace fw-bold">{currentLangConfig?.flag}</span>
+            <span className="fs-4 px-2 py-0.5 bg-body rounded-2 border shadow-sm">{currentLangConfig?.flag.length > 2 ? currentLangConfig?.flag : '🌐'}</span>
             <h1 className="h4 mb-0 fw-bold">Espace {currentLangConfig?.name}</h1>
           </div>
           <button onClick={() => setDarkMode(!darkMode)} className="btn btn-outline-secondary rounded-circle px-2 py-1.5 d-md-none ms-2">
