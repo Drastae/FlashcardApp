@@ -333,6 +333,39 @@ export default function App() {
     await fetchScoresAndCards();
   };
 
+  const handlePixabaySelect = async (url) => {
+  setUploading(true);
+  try {
+    // 1. Télécharger l'image depuis Pixabay en tant que Blob
+    const response = await fetch(url);
+    const blob = await response.blob();
+    
+    // 2. Préparer le nom du fichier pour Supabase
+    const fileName = `${Math.random()}.jpg`;
+    const filePath = `${selectedLang}/${fileName}`;
+
+    // 3. Téléverser le Blob sur Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from('flashcards-images')
+      .upload(filePath, blob, { contentType: 'image/jpeg' });
+
+    if (uploadError) throw uploadError;
+
+    // 4. Récupérer l'URL publique permanente
+    const { data } = supabase.storage
+      .from('flashcards-images')
+      .getPublicUrl(filePath);
+
+    if (data?.publicUrl) {
+      setImageUrlInput(data.publicUrl);
+    }
+  } catch (error) {
+    console.error("Échec du transfert de l'image Pixabay vers Supabase:", error);
+  } finally {
+    setUploading(false);
+  }
+};
+
   // --- ACTIONS DE GESTION DES LISTES DE LANGUES ---
   const handleAddOrUpdateLanguage = async (e) => {
     e.preventDefault();
@@ -1009,7 +1042,7 @@ export default function App() {
                     <span className="d-block small text-muted mb-2">Sélectionnez une image :</span>
                     <div className="row g-2">
                       {apiImages.map((url, index) => (
-                        <div key={index} className="col-4 col-sm-2" style={{ cursor: 'pointer' }} onClick={() => setImageUrlInput(url)}>
+                        <div key={index} className="col-4 col-sm-2" style={{ cursor: 'pointer' }} onClick={() => handlePixabaySelect(url)>
                           <img src={url} alt="" className={`img-fluid rounded border ${imageUrlInput === url ? 'border-primary border-3' : 'opacity-75'}`} style={{ height: '65px', objectFit: 'cover', width: '100%' }} />
                         </div>
                       ))}
