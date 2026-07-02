@@ -449,58 +449,58 @@ export default function App() {
   // --- ÉCRAN 1 : ACCUEIL CONFIGURATION TYPE BENTO ---
   if (!selectedLang) {
     return (
-      <div className="container py-5 min-h-screen d-flex flex-column align-items-center justify-content-center">
+      <div className="container py-4 max-w-4xl min-h-screen d-flex flex-column align-items-center justify-content-start">
         <style>{`
           .panda-container {
             display: flex;
             flex-direction: column;
             align-items: center;
-            margin-bottom: 1.5rem;
+            margin-bottom: 0.5rem;
             perspective: 800px;
           }
           .panda-bubble {
             background: var(--bs-body-tertiary);
             border: 1px solid var(--bs-border-color);
-            border-radius: 1rem;
-            padding: 0.6rem 1.2rem;
+            border-radius: 0.75rem;
+            padding: 0.4rem 1rem;
             position: relative;
-            margin-bottom: 1rem;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            margin-bottom: 0.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
             font-weight: 600;
-            font-size: 0.95rem;
+            font-size: 0.85rem;
             text-align: center;
           }
           .panda-bubble::after {
             content: '';
             position: absolute;
-            bottom: -8px;
+            bottom: -6px;
             left: 50%;
             transform: translateX(-50%);
-            border-width: 8px 8px 0;
+            border-width: 6px 6px 0;
             border-style: solid;
             border-color: var(--bs-border-color) transparent;
             display: block;
           }
           .panda-avatar-3d {
-            width: 80px;
-            height: 80px;
+            width: 56px; /* Réduit de 30% */
+            height: 56px; /* Réduit de 30% */
             position: relative;
             transform-style: preserve-3d;
             animation: pandaFloat 4s ease-in-out infinite;
           }
           .panda-head {
-            width: 74px;
-            height: 70px;
+            width: 52px;
+            height: 49px;
             background: #ffffff;
-            border: 2.5px solid #111827;
+            border: 2px solid #111827;
             border-radius: 50%;
             position: absolute;
-            top: 5px;
-            left: 3px;
+            top: 3px;
+            left: 2px;
           }
           .panda-ear {
-            width: 24px;
-            height: 24px;
+            width: 17px;
+            height: 17px;
             background: #111827;
             border-radius: 50%;
             position: absolute;
@@ -508,68 +508,81 @@ export default function App() {
           .panda-ear.left { left: 0; }
           .panda-ear.right { right: 0; }
           .panda-eye-patch {
-            width: 20px;
-            height: 26px;
+            width: 14px;
+            height: 18px;
             background: #111827;
             border-radius: 50%;
             position: absolute;
-            top: 20px;
+            top: 14px;
           }
-          .panda-eye-patch.left { left: 12px; transform: rotate(-15deg); }
-          .panda-eye-patch.right { right: 12px; transform: rotate(15deg); }
+          .panda-eye-patch.left { left: 8px; transform: rotate(-15deg); }
+          .panda-eye-patch.right { right: 8px; transform: rotate(15deg); }
           .panda-eye-pupil {
-            width: 6px;
-            height: 6px;
+            width: 4px;
+            height: 4px;
             background: #ffffff;
             border-radius: 50%;
             position: absolute;
-            top: 8px;
-            left: 7px;
+            top: 6px;
+            left: 5px;
           }
           .panda-nose {
-            width: 12px;
-            height: 8px;
+            width: 8px;
+            height: 6px;
             background: #111827;
             border-radius: 50%;
             position: absolute;
-            top: 44px;
-            left: 31px;
+            top: 31px;
+            left: 22px;
           }
           @keyframes pandaFloat {
             0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-5px); }
+            50% { transform: translateY(-4px); }
           }
           
-          /* STRUCTURE BENTO EFFECT */
+          /* COMPACT BENTO EFFECT */
           .bento-card {
-            border-radius: 1.25rem !important;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            border: 1px solid rgba(255,255,255,0.1) !important;
+            border-radius: 1rem !important;
+            min-height: 135px; /* Hauteur optimisée */
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid var(--bs-border-color) !important;
+            background: var(--bs-card-bg) !important;
+            cursor: pointer;
           }
           .bento-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 1rem 2rem rgba(0,0,0,0.15) !important;
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.08) !important;
+          }
+          .bento-card:active {
+            transform: scale(0.98);
           }
           .bento-action-btn {
-            background-color: rgba(17, 24, 39, 0.4) !important; /* Fond sombre semi-transparent constant */
-            color: #ffffff !important;
-            border: none !important;
+            background-color: var(--bs-secondary-bg) !important;
+            color: var(--bs-body-color) !important;
+            border: 1px solid var(--bs-border-color) !important;
             transition: background-color 0.2s ease, transform 0.2s ease;
           }
           .bento-action-btn:hover {
-            background-color: rgba(17, 24, 39, 0.7) !important; /* S'assombrit au survol pour un contraste maximal */
-            transform: scale(1.05);
+            background-color: rgba(100, 100, 100, 0.2) !important;
+          }
+          
+          /* Intégration Mode Sombre Spécifique */
+          [data-bs-theme="dark"] .bento-card {
+            background: #1E1E1E !important;
+            border: 1px solid #2D2D2D !important;
           }
         `}</style>
 
+        {/* Bouton de thème absolu */}
         <div className="position-absolute top-0 end-0 m-3">
-          <button onClick={() => setDarkMode(!darkMode)} className="btn btn-outline-secondary rounded-circle p-2">
+          <button onClick={() => setDarkMode(!darkMode)} className="btn btn-outline-secondary rounded-circle p-2 btn-sm">
             {darkMode ? <i className="bi bi-sun-fill"></i> : <i className="bi bi-moon-fill"></i>}
           </button>
         </div>
         
-        <div className="panda-container">
-          <div className="panda-bubble">Coucou, veux-tu apprendre une langue ?</div>
+        {/* En-tête compactée */}
+        <div className="panda-container mt-2">
+          <div className="panda-bubble">📚 Choisis une langue pour commencer.</div>
           <div className="panda-avatar-3d">
             <div className="panda-ear left"></div>
             <div className="panda-ear right"></div>
@@ -581,62 +594,60 @@ export default function App() {
           </div>
         </div>
 
-        <div className="text-center mb-5">
-          <h1 className="h2 fw-bold tracking-tight mb-2">Vocabulaire & Flashcards</h1>
-          <button onClick={() => setShowLangForm(!showLangForm)} className="btn btn-primary rounded-pill px-4 shadow-sm">
-            <i className={`bi ${showLangForm ? 'bi-x-circle' : 'bi-plus-circle'} me-2`}></i>
-            {showLangForm ? 'Fermer la configuration' : 'Ajouter / Modifier une langue'}
+        {/* Ligne de Titre Principale épurée */}
+        <div className="d-flex align-items-center justify-content-between w-100 mb-3 border-bottom pb-2">
+          <div>
+            <h1 className="h4 fw-bold mb-0">Vocabulaire & Flashcards</h1>
+            <p className="text-muted small mb-0 d-none d-sm-block">Apprends une langue grâce aux flashcards</p>
+          </div>
+          <button onClick={() => setShowLangForm(!showLangForm)} className="btn btn-primary btn-sm rounded-pill px-3 shadow-sm">
+            <i className={`bi ${showLangForm ? 'bi-x-circle' : 'bi-plus-lg'} me-1`}></i>
+            {showLangForm ? 'Fermer' : 'Ajouter'}
           </button>
         </div>
 
         {showLangForm && (
-          <div className="card p-4 shadow-lg border-0 rounded-4 w-100 max-w-md mb-5 bg-body-tertiary">
-            <form onSubmit={handleAddOrUpdateLanguage} className="row g-3">
+          <div className="card p-3 shadow-sm border rounded-4 w-100 max-w-md mb-4 bg-body-tertiary">
+            <form onSubmit={handleAddOrUpdateLanguage} className="row g-2">
               <div className="col-6">
-                <label className="form-label small fw-bold">Code (ex: es, it)</label>
-                <input type="text" className="form-control" placeholder="es" value={langIdInput} onChange={(e) => setLangIdInput(e.target.value)} required />
+                <label className="form-label small fw-bold mb-1">Code ISO (ex: es, de)</label>
+                <input type="text" className="form-control form-control-sm" placeholder="es" value={langIdInput} onChange={(e) => setLangIdInput(e.target.value)} required />
               </div>
               <div className="col-6">
-                <label className="form-label small fw-bold">Drapeau émoji</label>
-                <select className="form-select" value={langFlagInput} onChange={(e) => setLangFlagInput(e.target.value)} required>
+                <label className="form-label small fw-bold mb-1">Drapeau</label>
+                <select className="form-select form-select-sm" value={langFlagInput} onChange={(e) => setLangFlagInput(e.target.value)} required>
                   {AVAILABLE_FLAGS.map((f, i) => (
                     <option key={i} value={f.flag}>{f.flag} - {f.label}</option>
                   ))}
                 </select>
               </div>
               <div className="col-12">
-                <label className="form-label small fw-bold">Nom vernaculaire</label>
-                <input type="text" className="form-control" placeholder="Espagnol" value={langNameInput} onChange={(e) => setLangNameInput(e.target.value)} required />
+                <label className="form-label small fw-bold mb-1">Nom de la langue</label>
+                <input type="text" className="form-control form-control-sm" placeholder="Espagnol" value={langNameInput} onChange={(e) => setLangNameInput(e.target.value)} required />
               </div>
               <div className="col-12">
-                <label className="form-label small fw-bold">Locale Audio (ex: es-ES)</label>
-                <input type="text" className="form-control" placeholder="es-ES" value={langLocaleInput} onChange={(e) => setLangLocaleInput(e.target.value)} />
+                <label className="form-label small fw-bold mb-1">Locale Audio (ex: es-ES)</label>
+                <input type="text" className="form-control form-control-sm" placeholder="es-ES" value={langLocaleInput} onChange={(e) => setLangLocaleInput(e.target.value)} />
               </div>
               <div className="col-6">
-                <label className="form-label small fw-bold">Couleur Gauche</label>
-                <div className="input-group">
-                  <span className="input-group-text bg-transparent"><i className="bi bi-palette"></i></span>
-                  <input type="color" className="form-control form-control-color w-100" value={langColorStart} onChange={(e) => setLangColorStart(e.target.value)} />
-                </div>
+                <label className="form-label small fw-bold mb-1">Bordure Gauche</label>
+                <input type="color" className="form-control form-control-color form-control-sm w-100" value={langColorStart} onChange={(e) => setLangColorStart(e.target.value)} />
               </div>
               <div className="col-6">
-                <label className="form-label small fw-bold">Couleur Droite</label>
-                <div className="input-group">
-                  <span className="input-group-text bg-transparent"><i className="bi bi-palette-fill"></i></span>
-                  <input type="color" className="form-control form-control-color w-100" value={langColorEnd} onChange={(e) => setLangColorEnd(e.target.value)} />
-                </div>
+                <label className="form-label small fw-bold mb-1">Bordure Droite</label>
+                <input type="color" className="form-control form-control-color form-control-sm w-100" value={langColorEnd} onChange={(e) => setLangColorEnd(e.target.value)} />
               </div>
-              <div className="col-12">
-                <button type="submit" className="btn btn-success w-100 rounded-3 fw-medium">Confirmer et sauver</button>
+              <div className="col-12 mt-2">
+                <button type="submit" className="btn btn-success btn-sm w-100 rounded-3 fw-medium">Sauvegarder la langue</button>
               </div>
             </form>
           </div>
         )}
 
-        {/* GRILLE D'AFFICHAGE TYPE BENTO */}
-        <div className="row g-4 w-100 max-w-4xl justify-content-center">
+        {/* GRILLE CONFIGURÉE : STYLE NOTION / LINEAR COMPACT */}
+        <div className="row g-3 w-100 justify-content-center">
           {languages.map((lang) => (
-            <div key={lang.id} className="col-12 col-md-6 col-lg-4">
+            <div key={lang.id} className="col-12 col-sm-6">
               <div 
                 onClick={() => {
                   setSelectedLang(lang.id);
@@ -644,11 +655,11 @@ export default function App() {
                   setActiveTab('review');
                   resetVerification();
                 }}
-                className="card bento-card h-100 p-4 shadow-sm text-white position-relative overflow-hidden d-flex flex-column justify-content-between"
-                style={{ background: `linear-gradient(135deg, ${lang.color_start} 0%, ${lang.color_end} 100%)` }}
+                className="card bento-card p-3 shadow-sm d-flex flex-column justify-content-between position-relative overflow-hidden"
+                style={{ borderLeft: `5px solid ${lang.color_start || '#3b82f6'}` }}
               >
-                {/* Actions Absolues dans la carte */}
-                <div className="position-absolute top-0 end-0 m-3 d-flex gap-2 z-2">
+                {/* Actions épurées coin haut droit */}
+                <div className="position-absolute top-0 end-0 m-2 d-flex gap-1 z-2">
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
@@ -660,33 +671,42 @@ export default function App() {
                       setLangColorEnd(lang.color_end);
                       setShowLangForm(true);
                     }}
-                    className="btn btn-sm bento-action-btn p-2 rounded-circle"
-                    title="Éditer"
+                    className="btn btn-sm bento-action-btn p-1 rounded-2"
+                    title="Modifier"
                   >
-                    <i className="bi bi-pencil-fill fs-6"></i>
+                    <i className="bi bi-pencil fs-7 px-1"></i>
                   </button>
                   <button 
                     onClick={(e) => handleDeleteLanguage(e, lang.id)} 
-                    className="btn btn-sm bento-action-btn p-2 rounded-circle"
+                    className="btn btn-sm bento-action-btn p-1 rounded-2 text-danger"
                     title="Supprimer"
                   >
-                    <i className="bi bi-trash-fill fs-6"></i>
+                    <i className="bi bi-trash fs-7 px-1"></i>
                   </button>
                 </div>
 
-                <div className="mb-4">
-                  <span className="fs-1 d-block mb-2 p-2 bg-white bg-opacity-10 rounded-3 d-inline-block line-height-1 shadow-sm">{lang.flag.length > 2 ? lang.flag : '🌐'}</span>
-                  <h3 className="h4 fw-bold mb-0 text-truncate pr-5">{lang.name}</h3>
+                {/* Contenu textuel condensé */}
+                <div>
+                  <div className="d-flex align-items-center gap-2 mb-1">
+                    <span className="fs-4">{lang.flag.length > 2 ? lang.flag : '🌐'}</span>
+                    <h3 className="h6 fw-bold mb-0 text-truncate text-body" style={{ maxWidth: '70%' }}>{lang.name}</h3>
+                  </div>
+                  <div className="text-muted font-monospace opacity-75" style={{ fontSize: '0.75rem' }}>
+                    ISO : <span className="text-uppercase fw-bold">{lang.id}</span>
+                  </div>
                 </div>
                 
-                <div className="d-flex align-items-center justify-content-between pt-3 border-top border-white border-opacity-10 opacity-75 small">
-                  <span>Code : <span className="font-monospace text-uppercase fw-bold">{lang.id}</span></span>
-                  <i className="bi bi-arrow-right-circle-fill fs-5"></i>
+                {/* Pied de carte avec fausses métriques pour enrichir visuellement */}
+                <div className="d-flex align-items-center justify-content-between pt-2 border-top border-translucent opacity-80" style={{ fontSize: '0.75rem' }}>
+                  <span className="text-muted"><i className="bi bi-collection me-1"></i>Flashcards</span>
+                  <div className="d-flex align-items-center text-primary fw-medium">
+                    Continuer <i className="bi bi-arrow-right ms-1"></i>
+                  </div>
                 </div>
               </div>
             </div>
           ))}
-          {languages.length === 0 && <p className="text-center text-muted small">Aucune liste linguistique active.</p>}
+          {languages.length === 0 && <p className="text-center text-muted small py-4">Aucune langue active.</p>}
         </div>
       </div>
     );
