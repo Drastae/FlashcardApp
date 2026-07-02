@@ -135,7 +135,7 @@ export default function App() {
     if (!window.speechSynthesis || !currentLangConfig) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = currentLangConfig.locale;
+     utterance.lang = currentLangConfig.locale;
     utterance.rate = 0.9;
     window.speechSynthesis.speak(utterance);
   };
@@ -163,6 +163,36 @@ export default function App() {
     if (e.key === 'Enter') {
       e.preventDefault();
       searchOnlineImages(searchQuery);
+    }
+  };
+
+  // --- TRANSFERT DE L'IMAGE PIXABAY VERS SUPABASE STORAGE ---
+  const handlePixabaySelect = async (url) => {
+    setUploading(true);
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      
+      const fileName = `${Math.random()}.jpg`;
+      const filePath = `${selectedLang}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('flashcards-images')
+        .upload(filePath, blob, { contentType: 'image/jpeg' });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from('flashcards-images')
+        .getPublicUrl(filePath);
+
+      if (data?.publicUrl) {
+        setImageUrlInput(data.publicUrl);
+      }
+    } catch (error) {
+      console.error("Échec du transfert de l'image Pixabay vers Supabase Storage:", error);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -332,39 +362,6 @@ export default function App() {
     setTypeInput('n.');
     await fetchScoresAndCards();
   };
-
-  const handlePixabaySelect = async (url) => {
-  setUploading(true);
-  try {
-    // 1. Télécharger l'image depuis Pixabay en tant que Blob
-    const response = await fetch(url);
-    const blob = await response.blob();
-    
-    // 2. Préparer le nom du fichier pour Supabase
-    const fileName = `${Math.random()}.jpg`;
-    const filePath = `${selectedLang}/${fileName}`;
-
-    // 3. Téléverser le Blob sur Supabase Storage
-    const { error: uploadError } = await supabase.storage
-      .from('flashcards-images')
-      .upload(filePath, blob, { contentType: 'image/jpeg' });
-
-    if (uploadError) throw uploadError;
-
-    // 4. Récupérer l'URL publique permanente
-    const { data } = supabase.storage
-      .from('flashcards-images')
-      .getPublicUrl(filePath);
-
-    if (data?.publicUrl) {
-      setImageUrlInput(data.publicUrl);
-    }
-  } catch (error) {
-    console.error("Échec du transfert de l'image Pixabay vers Supabase:", error);
-  } finally {
-    setUploading(false);
-  }
-};
 
   // --- ACTIONS DE GESTION DES LISTES DE LANGUES ---
   const handleAddOrUpdateLanguage = async (e) => {
@@ -1018,7 +1015,7 @@ export default function App() {
                   <div className="col-md-6 border-end">
                     <span className="d-block small text-muted fw-medium mb-2">Option A : Importer depuis votre PC</span>
                     <input type="file" accept="image/*" onChange={handleLocalFileUpload} className="form-control btn-sm bg-body" />
-                    {uploading && <div className="small text-primary mt-1"><span className="spinner-border spinner-border-sm me-1"></span>Upload en cours...</div>}
+                    {uploading && <div className="small text-primary mt-1"><span className="spinner-border spinner-border-sm me-1"></span>Action sur l'image en cours...</div>}
                   </div>
                   <div className="col-md-6">
                     <span className="d-block small text-muted fw-medium mb-2">Option B : Rechercher sur Pixabay</span>
@@ -1039,10 +1036,10 @@ export default function App() {
 
                 {apiImages.length > 0 && (
                   <div className="mt-3">
-                    <span className="d-block small text-muted mb-2">Sélectionnez une image :</span>
+                    <span className="d-block small text-muted mb-2">Sélectionnez une image (sera automatiquement enregistrée sur Supabase) :</span>
                     <div className="row g-2">
                       {apiImages.map((url, index) => (
-                        <div key={index} className="col-4 col-sm-2" style={{ cursor: 'pointer' }} onClick={() => handlePixabaySelect(url)>
+                        <div key={index} className="col-4 col-sm-2" style={{ cursor: 'pointer' }} onClick={() => handlePixabaySelect(url)}>
                           <img src={url} alt="" className={`img-fluid rounded border ${imageUrlInput === url ? 'border-primary border-3' : 'opacity-75'}`} style={{ height: '65px', objectFit: 'cover', width: '100%' }} />
                         </div>
                       ))}
@@ -1054,7 +1051,7 @@ export default function App() {
                   <div className="mt-3 p-2 bg-body rounded border d-flex align-items-center justify-content-between">
                     <div className="d-flex align-items-center gap-2 overflow-hidden">
                       <img src={imageUrlInput} alt="Sélection" className="rounded border" style={{ width: '45px', height: '45px', objectFit: 'cover' }} />
-                      <span className="small text-success text-truncate fw-medium">Image liée avec succès</span>
+                      <span className="small text-success text-truncate fw-medium">Image liée avec succès sur Supabase</span>
                     </div>
                     <button type="button" onClick={() => setImageUrlInput('')} className="btn btn-sm btn-outline-danger border-0"><i className="bi bi-trash-fill"></i></button>
                   </div>
