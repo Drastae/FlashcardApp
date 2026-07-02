@@ -135,7 +135,7 @@ export default function App() {
     if (!window.speechSynthesis || !currentLangConfig) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-     utterance.lang = currentLangConfig.locale;
+    utterance.lang = currentLangConfig.locale;
     utterance.rate = 0.9;
     window.speechSynthesis.speak(utterance);
   };
@@ -551,11 +551,14 @@ export default function App() {
             box-shadow: 0 1rem 2rem rgba(0,0,0,0.15) !important;
           }
           .bento-action-btn {
-            opacity: 0.8;
-            transition: opacity 0.2s;
+            background-color: rgba(17, 24, 39, 0.4) !important; /* Fond sombre semi-transparent constant */
+            color: #ffffff !important;
+            border: none !important;
+            transition: background-color 0.2s ease, transform 0.2s ease;
           }
-          .bento-card:hover .bento-action-btn {
-            opacity: 1;
+          .bento-action-btn:hover {
+            background-color: rgba(17, 24, 39, 0.7) !important; /* S'assombrit au survol pour un contraste maximal */
+            transform: scale(1.05);
           }
         `}</style>
 
@@ -645,7 +648,7 @@ export default function App() {
                 style={{ background: `linear-gradient(135deg, ${lang.color_start} 0%, ${lang.color_end} 100%)` }}
               >
                 {/* Actions Absolues dans la carte */}
-                <div className="position-absolute top-0 end-0 m-3 d-flex gap-1.5 z-2">
+                <div className="position-absolute top-0 end-0 m-3 d-flex gap-2 z-2">
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
@@ -657,14 +660,14 @@ export default function App() {
                       setLangColorEnd(lang.color_end);
                       setShowLangForm(true);
                     }}
-                    className="btn btn-sm btn-light bg-opacity-20 border-0 text-white bento-action-btn p-1.5 rounded-circle"
+                    className="btn btn-sm bento-action-btn p-2 rounded-circle"
                     title="Éditer"
                   >
                     <i className="bi bi-pencil-fill fs-6"></i>
                   </button>
                   <button 
                     onClick={(e) => handleDeleteLanguage(e, lang.id)} 
-                    className="btn btn-sm btn-danger bg-opacity-20 border-0 text-white bento-action-btn p-1.5 rounded-circle"
+                    className="btn btn-sm bento-action-btn p-2 rounded-circle"
                     title="Supprimer"
                   >
                     <i className="bi bi-trash-fill fs-6"></i>
